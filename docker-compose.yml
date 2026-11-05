@@ -1,9 +1,40 @@
 services:
+  # ============================================================================
+  # Default: Single Unified All-in-One Container
+  # Run simply with: docker compose up
+  # Bundles FastAPI Engine + Fastify Gateway + Keycloak IAM + SQLite in 1 container
+  # ============================================================================
+  govsim:
+    build:
+      context: .
+      dockerfile: Dockerfile.all-in-one
+    container_name: govsim_all_in_one
+    ports:
+      - "3000:3000"
+      - "8080:8080"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - KEYCLOAK_GOOGLE_CLIENT_ID=${KEYCLOAK_GOOGLE_CLIENT_ID:-}
+      - KEYCLOAK_GOOGLE_CLIENT_SECRET=${KEYCLOAK_GOOGLE_CLIENT_SECRET:-}
+      - KEYCLOAK_APPLE_CLIENT_ID=${KEYCLOAK_APPLE_CLIENT_ID:-}
+      - KEYCLOAK_APPLE_TEAM_ID=${KEYCLOAK_APPLE_TEAM_ID:-}
+      - KEYCLOAK_APPLE_KEY_ID=${KEYCLOAK_APPLE_KEY_ID:-}
+      - JWT_SECRET=${JWT_SECRET:-govsim-ai-secret-key-change-in-production}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # ============================================================================
+  # Optional Split Microservice Topology (for individual container development)
+  # Run with: docker compose --profile split up
+  # ============================================================================
   fiscal_ai_engine:
     build:
       context: ./fiscal_ai_engine
       dockerfile: Dockerfile
     container_name: govsim_fiscal_ai_engine
+    profiles: ["split"]
     ports:
       - "8000:8000"
     environment:
@@ -13,28 +44,20 @@ services:
     volumes:
       - ./fiscal_ai_engine:/app/fiscal_ai_engine
     command: ["uvicorn", "fiscal_ai_engine.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - govsim_net
 
   gateway_service:
     build:
       context: ./gateway_service
       dockerfile: Dockerfile
     container_name: govsim_gateway_service
+    profiles: ["split"]
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - PORT=3000
       - FISCAL_ENGINE_URL=http://fiscal_ai_engine:8000
-      - UPSTREAM_TIMEOUT_MS=30000
       - DB_PATH=/app/data/govsim.sqlite3
-      - JWT_SECRET=${JWT_SECRET:-govsim-ai-secret-key-change-in-production}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
+      - KEYCLOAK_URL=http://keycloak:8080
       - KEYCLOAK_REALM=govsim
     volumes:
       - ./gateway_service/src:/app/src
@@ -42,49 +65,19 @@ services:
       - ./data:/app/data
     command: ["npm", "run", "dev"]
     depends_on:
-      fiscal_ai_engine:
-        condition: service_healthy
-    networks:
-      - govsim_net
-
-  # Optional Enterprise Open-Source IAM (Keycloak)
-  # Run with: docker compose --profile auth up
-  keycloak_db:
-    image: postgres:16-alpine
-    container_name: govsim_keycloak_db
-    profiles: ["auth"]
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak_password
-    volumes:
-      - ./data/keycloak_postgres:/var/lib/postgresql/data
-    networks:
-      - govsim_net
+      - fiscal_ai_engine
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
-    container_name: govsim_keycloak
-    profiles: ["auth"]
+    container_name: govsim_keycloak_standalone
+    profiles: ["split"]
     command: start-dev --import-realm
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin_password
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak_password
-      KC_HOSTNAME_STRICT: "false"
-      KC_HTTP_ENABLED: "true"
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_HOSTNAME_STRICT=false
+      - KC_HTTP_ENABLED=true
     volumes:
       - ./keycloak/govsim-realm.json:/opt/keycloak/data/import/govsim-realm.json:ro
     ports:
-      - "8080:8080"
-    depends_on:
-      - keycloak_db
-    networks:
-      - govsim_net
-
-networks:
-  govsim_net:
-    driver: bridge
+      - "8081:8080"

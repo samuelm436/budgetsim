@@ -25,6 +25,7 @@ import {
   saveNewScenario,
   updateScenario,
   deleteScenario,
+  UserRecord,
   UserTier,
   TIER_LIMITS,
 } from "./db";
@@ -991,19 +992,132 @@ const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || "govsim";
 const KEYCLOAK_CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || "govsim-web";
 
 /**
+ * Authenticates user credentials directly against Keycloak via Direct Access Grants (password flow).
+ * Returns the synced UserRecord if valid, or null if Keycloak rejected or is unreachable.
+ */
+async function authenticateWithKeycloak(email: string, password: string): Promise<UserRecord | null> {
+  try {
+    const res = await fetch(`${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        client_id: KEYCLOAK_CLIENT_ID,
+        username: email,
+        password,
+        scope: "openid profile email",
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const data = (await res.json()) as any;
+    const unverified = jwt.decode(data.id_token || data.access_token) as any;
+    if (!unverified) return null;
+
+    const roles: string[] = unverified?.realm_access?.roles || [];
+    let tier: UserTier = "free";
+    if (roles.includes("pro") || roles.includes("tier_pro") || roles.includes("journalist")) {
+      tier = "pro";
+    } else if (roles.includes("business") || roles.includes("enterprise")) {
+      tier = "business";
+    }
+
+    return syncExternalUser({
+      email: unverified.email || email,
+      name: unverified.name || unverified.preferred_username || email.split("@")[0],
+      provider: "keycloak",
+      providerId: unverified.sub || email,
+      tier,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Creates a new user in Keycloak via Keycloak's Admin REST API.
+ */
+async function registerUserInKeycloak(email: string, name: string, password: string): Promise<boolean> {
+  try {
+    const adminTokenRes = await fetch(`${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        client_id: "admin-cli",
+        username: process.env.KEYCLOAK_ADMIN || "admin",
+        password: process.env.KEYCLOAK_ADMIN_PASSWORD || "admin",
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!adminTokenRes.ok) return false;
+    const adminData = (await adminTokenRes.json()) as any;
+    const adminToken = adminData.access_token;
+
+    const createUserRes = await fetch(`${KEYCLOAK_URL}/admin/realms/${KEYCLOAK_REALM}/users`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username: email,
+        email,
+        firstName: name,
+        enabled: true,
+        emailVerified: true,
+        credentials: [
+          {
+            type: "password",
+            value: password,
+            temporary: false,
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    return createUserRes.status === 201 || createUserRes.status === 409;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * GET /api/auth/keycloak/login
  * Initiates the standard OpenID Connect authorization code redirect to Keycloak.
+ * Supports ?idp=google and ?idp=apple for direct social login forwarding.
  */
-server.get("/api/auth/keycloak/login", async (request: FastifyRequest, reply: FastifyReply) => {
+server.get<{ Querystring: { idp?: string } }>("/api/auth/keycloak/login", async (request, reply) => {
   const host = request.headers.host || "localhost:3000";
   const protocol = request.headers["x-forwarded-proto"] || "http";
   const redirectUri = `${protocol}://${host}/api/auth/keycloak/callback`;
 
-  const authUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth?client_id=${KEYCLOAK_CLIENT_ID}&response_type=code&scope=openid%20profile%20email&redirect_uri=${encodeURIComponent(
+  let authUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth?client_id=${KEYCLOAK_CLIENT_ID}&response_type=code&scope=openid%20profile%20email&redirect_uri=${encodeURIComponent(
     redirectUri
   )}`;
 
+  if (request.query.idp) {
+    authUrl += `&kc_idp_hint=${encodeURIComponent(request.query.idp)}`;
+  }
+
   return reply.redirect(authUrl);
+});
+
+/**
+ * Direct aliases for Google & Apple OIDC redirects via Keycloak
+ */
+server.get("/api/auth/login/google", async (_request, reply) => {
+  return reply.redirect("/api/auth/keycloak/login?idp=google");
+});
+
+server.get("/api/auth/login/apple", async (_request, reply) => {
+  return reply.redirect("/api/auth/keycloak/login?idp=apple");
 });
 
 /**
@@ -1106,7 +1220,7 @@ server.get("/api/auth/keycloak/status", async (_request: FastifyRequest, reply: 
 
 /**
  * POST /api/auth/register
- * Creates a new user in SQLite and returns a JWT token.
+ * Creates a new user in SQLite (and Keycloak if active) and returns a JWT token.
  */
 server.post("/api/auth/register", async (request: FastifyRequest, reply: FastifyReply) => {
   const body = (request.body as Record<string, unknown>) || {};
@@ -1125,6 +1239,11 @@ server.post("/api/auth/register", async (request: FastifyRequest, reply: Fastify
   if (existing) {
     throw new GatewayHttpError(409, "USER_EXISTS", "An account with this email address already exists.");
   }
+
+  // Register in Keycloak asynchronously in background if available
+  registerUserInKeycloak(email, name || email.split("@")[0], password).catch((e) =>
+    console.warn("[Keycloak] User registration sync skipped:", e.message)
+  );
 
   const passwordHash = await hashPassword(password);
   const newUser = createUser({
@@ -1155,7 +1274,7 @@ server.post("/api/auth/register", async (request: FastifyRequest, reply: Fastify
 
 /**
  * POST /api/auth/login
- * Validates credentials and returns a JWT session token.
+ * Validates credentials via Keycloak Direct Access Grant or SQLite fallback, returning a JWT token.
  */
 server.post("/api/auth/login", async (request: FastifyRequest, reply: FastifyReply) => {
   const body = (request.body as Record<string, unknown>) || {};
@@ -1166,6 +1285,25 @@ server.post("/api/auth/login", async (request: FastifyRequest, reply: FastifyRep
     throw new GatewayHttpError(400, "MISSING_CREDENTIALS", "Email and password are required.");
   }
 
+  // 1. Try Keycloak authentication first if Keycloak is reachable
+  const kcUser = await authenticateWithKeycloak(email, password);
+  if (kcUser) {
+    const token = signUserToken(kcUser);
+    return reply.status(200).send({
+      status: "AUTHENTICATED",
+      token,
+      user: {
+        id: kcUser.id,
+        email: kcUser.email,
+        name: kcUser.name,
+        tier: kcUser.tier,
+        role: kcUser.role,
+        provider: kcUser.auth_provider,
+      },
+    });
+  }
+
+  // 2. Fall back to local SQLite credentials
   const user = findUserByEmail(email);
   if (!user || !user.password_hash) {
     throw new GatewayHttpError(401, "INVALID_CREDENTIALS", "Invalid email or password.");

@@ -1,56 +1,100 @@
-# GovSim AI — Single-Container All-in-One Image
-# Combines: Fastify Gateway (Node.js 22) + Python 3.12 Fiscal Engine + SQLite Data Volume
-FROM python:3.12-slim-bookworm
+# ==============================================================================
+# GovSim AI — Single Unified All-in-One Container
+# ==============================================================================
+# Bundles:
+# 1. FastAPI Fiscal AI Engine (Python 3.12) on internal port 8000
+# 2. Keycloak 26.0 (Open-Source Identity Provider with embedded H2) on port 8080
+# 3. Fastify Web Application & API Gateway (Node.js 22 LTS) on port 3000
+# 4. Embedded SQLite & Keycloak Database storage persisted in /app/data volume
+# 5. Supervisord orchestrator to manage and auto-restart all services
+# ==============================================================================
 
-# Install Node.js 22, Supervisor, and Build Essentials
+FROM ubuntu:24.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC
+
+# Install system dependencies: Python 3.12, OpenJDK 21, Supervisor, Build tools, Curl
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    openjdk-21-jre-headless \
     supervisor \
+    curl \
     build-essential \
     ca-certificates \
+    sed \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy Keycloak 26.0 distribution from official image
+COPY --from=quay.io/keycloak/keycloak:26.0.0 /opt/keycloak /opt/keycloak
+RUN chmod +x /opt/keycloak/bin/kc.sh
+
 WORKDIR /app
 
-# 1. Install Python Engine dependencies
-COPY fiscal_ai_engine/requirements.txt /app/fiscal_ai_engine/
-RUN pip install --no-cache-dir -r /app/fiscal_ai_engine/requirements.txt
+# 1. Set up Python Fiscal Engine environment
+RUN python3 -m venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
-# 2. Install Node.js Gateway dependencies
+COPY fiscal_ai_engine/requirements.txt /app/fiscal_ai_engine/
+RUN /app/.venv/bin/pip install --no-cache-dir -r /app/fiscal_ai_engine/requirements.txt
+COPY fiscal_ai_engine /app/fiscal_ai_engine
+
+# 2. Set up Node.js Fastify Gateway & Web UI
 COPY gateway_service/package.json gateway_service/package-lock.json* /app/gateway_service/
 WORKDIR /app/gateway_service
 RUN npm install
-
-# 3. Copy source codes
-WORKDIR /app
-COPY fiscal_ai_engine /app/fiscal_ai_engine
 COPY gateway_service /app/gateway_service
-
-# Build Gateway TypeScript to JS
-WORKDIR /app/gateway_service
 RUN npm run build
 
-# Create persistent data directory for SQLite
-RUN mkdir -p /app/data
+# 3. Copy Keycloak realm configuration
+WORKDIR /app
+COPY keycloak/govsim-realm.json /app/keycloak/govsim-realm.json
+RUN mkdir -p /opt/keycloak/data/import && \
+    cp /app/keycloak/govsim-realm.json /opt/keycloak/data/import/govsim-realm.json
 
-# Environment configuration
+# 4. Create persistent data volume directory
+RUN mkdir -p /app/data /app/data/keycloak_h2 /var/log/supervisor
+
+# 5. Environment configuration
 ENV PORT=3000 \
     FISCAL_ENGINE_URL=http://127.0.0.1:8000 \
+    KEYCLOAK_URL=http://localhost:8080 \
+    KEYCLOAK_REALM=govsim \
+    KEYCLOAK_CLIENT_ID=govsim-web \
+    KEYCLOAK_ADMIN=admin \
+    KEYCLOAK_ADMIN_PASSWORD=admin \
+    KC_HTTP_PORT=8080 \
+    KC_HOSTNAME_STRICT=false \
+    KC_HTTP_ENABLED=true \
+    KC_HEALTH_ENABLED=true \
     DB_PATH=/app/data/govsim.sqlite3 \
     NODE_ENV=production
 
-# 4. Supervisor configuration to orchestrate both microservices in one container
+# 6. Supervisord configuration to orchestrate all microservices
 RUN echo '[supervisord]\n\
 nodaemon=true\n\
 logfile=/dev/null\n\
 pidfile=/tmp/supervisord.pid\n\
 \n\
 [program:fiscal_engine]\n\
-command=uvicorn fiscal_ai_engine.main:app --host 127.0.0.1 --port 8000\n\
+command=/app/.venv/bin/uvicorn fiscal_ai_engine.main:app --host 127.0.0.1 --port 8000\n\
 directory=/app\n\
+autostart=true\n\
+autorestart=true\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+\n\
+[program:keycloak]\n\
+command=/opt/keycloak/bin/kc.sh start-dev --import-realm --http-port=8080 --hostname-strict=false\n\
+directory=/opt/keycloak\n\
 autostart=true\n\
 autorestart=true\n\
 stdout_logfile=/dev/stdout\n\
@@ -69,9 +113,14 @@ stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
 ' > /etc/supervisor/conf.d/govsim.conf
 
-WORKDIR /app
+# 7. Entrypoint script for volume links and credentials
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
+# Persist all data in /app/data (SQLite + Keycloak H2)
 VOLUME ["/app/data"]
-EXPOSE 3000
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/govsim.conf"]
+# Expose Web App & Gateway (3000) and Keycloak IAM (8080)
+EXPOSE 3000 8080
+
+ENTRYPOINT ["/app/entrypoint.sh"]

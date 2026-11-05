@@ -2470,6 +2470,17 @@
         localStorage.setItem("govsim_auth_token", urlToken);
         window.history.replaceState({}, document.title, window.location.pathname);
       }
+      const authError = urlParams.get("auth_error");
+      if (authError) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setTimeout(() => {
+          openAuthModal("login");
+          const errorEl = document.getElementById("auth-error-msg");
+          if (errorEl) {
+            errorEl.innerHTML = `<strong>Authentication notice:</strong> ${escapeHtml(authError)}.<br><span style="font-size:0.75rem; color:var(--text-muted);">Ensure Google/Apple OAuth credentials are set in .env or the Keycloak admin console.</span>`;
+          }
+        }, 300);
+      }
       await refreshAuthMe();
       await checkKeycloakStatus();
     }
@@ -2635,48 +2646,9 @@
       }
     }
 
-    async function handleSocialLogin(provider) {
-      const errorEl = document.getElementById("auth-error-msg");
-      errorEl.innerText = "";
-
-      let email = "";
-      let name = "";
-      let tier = "free";
-
-      if (provider === "google") {
-        email = prompt("Enter Google Account Email for authentication:", "analyst.google@example.com");
-        if (!email) return;
-        name = email.split("@")[0].replace(".", " ");
-      } else if (provider === "apple") {
-        email = prompt("Enter Apple ID Email:", "user.apple@privaterelay.appleid.com");
-        if (!email) return;
-        name = "Apple User";
-      }
-
-      try {
-        const res = await fetch("/api/auth/social", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider,
-            email,
-            name,
-            tier
-          })
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          errorEl.innerText = data?.error?.message || "Social login failed.";
-          return;
-        }
-
-        localStorage.setItem("govsim_auth_token", data.token);
-        closeAuthModal();
-        await refreshAuthMe();
-      } catch (err) {
-        errorEl.innerText = `Social login error: ${err.message}`;
-      }
+    function handleSocialLogin(provider) {
+      // Real OpenID Connect / OAuth2 redirect via Keycloak
+      window.location.href = `/api/auth/keycloak/login?idp=${encodeURIComponent(provider)}`;
     }
 
     async function handleQuickLogin(tier) {
