@@ -1400,15 +1400,9 @@
   <div class="workspace">
     <!-- Left Column: Conversational Policy Architect -->
     <aside class="chat-panel">
-      <div class="panel-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-        <div>
-          <h2>Policy Simulation Console</h2>
-          <div id="chat-active-model-indicator" style="display:inline-flex; align-items:center; gap:6px; font-size:0.75rem; font-family:var(--font-mono); color:var(--text-secondary); margin-top:3px;">
-            <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10b981;"></span>
-            <span>Active Model: <strong id="chat-active-model-title" style="color:var(--text-primary);">GPT-6-Luna</strong></span>
-          </div>
-        </div>
-        <label class="grounding-toggle" title="Enable live Web Search (OpenAI web_search or Google Search Grounding for real-time empirical lookups).">
+      <div class="panel-header">
+        <h2>Policy Simulation Console</h2>
+        <label class="grounding-toggle" title="Enable live Web Search for real-time empirical lookups.">
           <input type="checkbox" id="chk-grounding" />
           <span>Web Search</span>
         </label>
@@ -1416,10 +1410,6 @@
 
       <div id="chat-messages">
         <div class="msg assistant">
-          <div style="display:flex; align-items:center; gap:5px; font-size:0.75rem; font-family:var(--font-mono); font-weight:700; color:#0284c7; margin-bottom:6px;">
-            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#0284c7;"></span>
-            <span id="welcome-active-model-badge">GPT-6-Luna</span>
-          </div>
           <p>
             <strong>2027 Federal Budget Baseline Loaded (Regierungsentwurf 2027).</strong><br />
             Core expenditures total <strong>€555.4B</strong> against <strong>€436.7B</strong> in non-credit revenues, leaving a net borrowing requirement of <strong>€118.7B</strong>.
@@ -1973,7 +1963,6 @@
       const secTime = (envelope.execution_time_ms / 1000).toFixed(1);
       const rawModel = envelope.model_used || envelope.simulation?.metadata?.model_used || currentActiveModelId;
       const modelBadge = formatModelShortBadge(rawModel);
-      const isGpt = modelBadge.toLowerCase().includes("gpt");
       const extractionMode = envelope.simulation?.metadata?.extraction_mode || "";
       const hasWebSearch = extractionMode.includes("WEB_SEARCH") || extractionMode.includes("GROUNDED") || Boolean(envelope.simulation?.metadata?.citations?.length);
 
@@ -1981,25 +1970,21 @@
       const citations = envelope.simulation?.metadata?.citations || [];
       if (citations.length > 0) {
         citationsHtml = `
-          <div style="margin-top:10px; padding:8px 10px; background:#f8fafc; border:1px solid var(--border-light); border-radius:6px; font-size:0.74rem;">
-            <div style="font-weight:700; color:var(--text-secondary); margin-bottom:4px; display:flex; align-items:center; gap:5px;">
-              <span>🌐 Web Search Sources:</span>
+          <div style="margin-top:8px;">
+            <button type="button" class="btn-sources-toggle" onclick="toggleSourcesList('${card.proposal_id}')" style="background:#f8fafc; border:1px solid var(--border-light); border-radius:4px; padding:3px 9px; font-size:0.72rem; color:var(--text-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-family:var(--font-sans); transition:all 0.15s ease;">
+              <span>🌐 Sources (${citations.length})</span>
+              <span id="sources-arrow-${card.proposal_id}" style="font-size:0.6rem; color:var(--text-muted);">▾</span>
+            </button>
+            <div id="sources-list-${card.proposal_id}" class="hidden" style="margin-top:6px; padding:8px 10px; background:#f8fafc; border:1px solid var(--border-light); border-radius:5px; font-size:0.73rem;">
+              <ul style="margin:0; padding-left:16px; color:var(--text-muted); line-height:1.4;">
+                ${citations.map(c => `<li style="margin-bottom:3px;"><a href="${c.uri}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:underline;">${c.title || c.uri}</a></li>`).join("")}
+              </ul>
             </div>
-            <ul style="margin:0; padding-left:18px; color:var(--text-muted);">
-              ${citations.slice(0, 4).map(c => `<li><a href="${c.uri}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:underline;">${c.title || c.uri}</a></li>`).join("")}
-            </ul>
           </div>
         `;
       }
 
       div.innerHTML = `
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding-bottom:5px; border-bottom:1px solid rgba(0,0,0,0.06);">
-          <div style="display:inline-flex; align-items:center; gap:5px; font-size:0.75rem; font-family:var(--font-mono); font-weight:700; color:${isGpt ? '#0284c7' : '#7c3aed'};">
-            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:${isGpt ? '#0284c7' : '#7c3aed'};"></span>
-            ${modelBadge}
-          </div>
-          <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">${secTime}s${hasWebSearch ? ' &bull; 🌐 Web Search' : ''}</span>
-        </div>
         <p>${envelope.chat_reply.feedback_text}</p>
         <div class="calc-card">
           <div class="calc-card-header">
@@ -2023,7 +2008,7 @@
           <div class="calc-deltas">${linesHtml}</div>
           ${citationsHtml}
           <div class="calc-card-actions">
-            <span class="exec-latency">${secTime}s &bull; <strong style="color:var(--text-primary); font-family:var(--font-mono);">${modelBadge}</strong></span>
+            <span class="exec-latency">${secTime}s &bull; ${modelBadge}${hasWebSearch ? ' &bull; 🌐 Web Search' : ''}</span>
             <button class="btn-apply" id="btn-apply-${card.proposal_id}" onclick="applyProposalToBudget('${card.proposal_id}')">
               Apply to Budget &rarr;
             </button>
@@ -2033,6 +2018,19 @@
 
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
+    }
+
+    function toggleSourcesList(proposalId) {
+      const listEl = document.getElementById(`sources-list-${proposalId}`);
+      const arrowEl = document.getElementById(`sources-arrow-${proposalId}`);
+      if (!listEl) return;
+      if (listEl.classList.contains("hidden")) {
+        listEl.classList.remove("hidden");
+        if (arrowEl) arrowEl.innerText = "▴";
+      } else {
+        listEl.classList.add("hidden");
+        if (arrowEl) arrowEl.innerText = "▾";
+      }
     }
 
     async function applyProposalToBudget(proposalId) {
@@ -2599,14 +2597,6 @@
       const adminModelLabel = document.getElementById("popover-active-model-label");
       if (adminModelLabel) {
         adminModelLabel.innerText = `${modelShortName} ›`;
-      }
-      const chatModelTitle = document.getElementById("chat-active-model-title");
-      if (chatModelTitle) {
-        chatModelTitle.innerText = modelShortName;
-      }
-      const welcomeBadge = document.getElementById("welcome-active-model-badge");
-      if (welcomeBadge) {
-        welcomeBadge.innerText = modelShortName;
       }
       const activeBadge = document.getElementById("active-model-badge");
       if (activeBadge) {
@@ -3182,10 +3172,6 @@
 
         msgEl.innerText = `✓ Active model successfully switched to ${formatModelShortBadge(currentActiveModelId)}!`;
         msgEl.style.color = "var(--positive)";
-        const chatModelTitle = document.getElementById("chat-active-model-title");
-        if (chatModelTitle) chatModelTitle.innerText = formatModelShortBadge(currentActiveModelId);
-        const welcomeBadge = document.getElementById("welcome-active-model-badge");
-        if (welcomeBadge) welcomeBadge.innerText = formatModelShortBadge(currentActiveModelId);
         await refreshAuthMe();
 
         setTimeout(() => {

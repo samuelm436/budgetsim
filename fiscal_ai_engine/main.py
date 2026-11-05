@@ -41,63 +41,34 @@ logging.basicConfig(
 )
 
 
-SYSTEM_EXTRACTION_INSTRUCTION = """You are the Chief Fiscal Economist AI for GovSim AI, an institutional policy & budget microsimulation platform.
-All output (including `policy_name`, `chat_feedback`, `display_name`, `rationale`, and `extracted_assumptions`) MUST be written in clear, executive **English**, even if the user writes their prompt in German or another language.
+SYSTEM_EXTRACTION_INSTRUCTION = """You are the Chief Fiscal Economist AI for GovSim AI.
+Speed & Precision Directive: Be concise, decisive, and institutional. All outputs must be in crisp English.
 
-Official Baseline Dataset: **German Federal Budget 2027 Government Draft (Regierungsentwurf 2027, Drucksache 21/7300)**:
-- Total Core Budget Expenditures: **€555.4B**
-- Total Non-Credit Revenues: **€436.7B** (Federal Tax Revenues: €398.6B + Non-Tax/Other: €38.1B)
-- Net Borrowing Requirement (Nettokreditaufnahme): **€118.7B**
-- Adult Population: **68.8 million** across 10 equal income deciles (6.88M adults per decile).
+Baseline: German Federal Budget 2027 Draft (Regierungsentwurf, €555.4B Exp / €436.7B Rev / €118.7B Deficit / 68.8M adults).
 
-Available Revenue Categories (`target_side = "revenue"`):
-- `income_and_wealth_taxes`: €162.4B (Income & Solidarity Taxes, Federal Share)
-- `value_added_and_consumption_taxes`: €146.8B (VAT & Import VAT, Federal Share)
-- `corporate_and_business_taxes`: €44.2B (Corporate & Trade Taxes)
-- `energy_and_environmental_taxes`: €45.2B (Energy, Carbon, Electricity, Aviation & Excise Taxes)
-- `non_tax_and_other_revenues`: €38.1B (Bundesbank Profit, Truck Tolls, Fees & EU Inflows)
+Revenue Categories:
+- `income_and_wealth_taxes` (€162.4B) | `value_added_and_consumption_taxes` (€146.8B) | `corporate_and_business_taxes` (€44.2B) | `energy_and_environmental_taxes` (€45.2B) | `non_tax_and_other_revenues` (€38.1B)
 
-Available Expenditure Categories (`target_side = "expenditure"`, 2027 Einzelpläne):
-- `labor_and_social_affairs_ep11`: €201.5B (Einzelplan 11 BMAS — Statutory Pension Subsidies ~€133B, Citizen's Benefit / Bürgergeld ~€42.6B, Labor Market Policy)
-- `defense_and_security_ep14`: €109.7B (Einzelplan 14 BMVg — Federal Defense & Military Procurement, +€27.1B surge in 2027 Draft)
-- `federal_debt_interest_ep32`: €43.6B (Einzelplan 32 Bundesschuld — Federal Debt Interest Service)
-- `transport_and_digital_ep12`: €26.4B (Einzelplan 12 BMV — Federal Rail, Autobahn, Waterways & Digital Infrastructure)
-- `research_tech_and_aerospace_ep30`: €22.0B (Einzelplan 30 BMFTR — Research, AI, Quantum, Biotech & Aerospace)
-- `family_education_and_youth_ep17`: €15.5B (Einzelplan 17 BMBFSFJ — Family Allowances, Elterngeld, Youth & Education)
-- `economic_affairs_energy_climate_ep09_16`: €8.3B (Einzelplan 09 BMWE €5.55B + Einzelplan 16 BMUKN €2.74B — Economic Policy, Energy & Environment)
-- `general_financial_admin_and_other`: €128.4B (Einzelplan 60 General Financial Admin, EP 15 Health, EP 06 Interior, EP 23 Development BMZ €9.47B, EP 08 Finance €11.1B & Federal Subsidies)
+Expenditure Categories (2027 Einzelpläne):
+- `labor_and_social_affairs_ep11` (€201.5B) | `defense_and_security_ep14` (€109.7B) | `federal_debt_interest_ep32` (€43.6B) | `transport_and_digital_ep12` (€26.4B) | `research_tech_and_aerospace_ep30` (€22.0B) | `family_education_and_youth_ep17` (€15.5B) | `economic_affairs_energy_climate_ep09_16` (€8.3B) | `general_financial_admin_and_other` (€128.4B)
 
-Instructions:
-1. Write a concise, authoritative 1-3 sentence `chat_feedback` in **English** explaining how the user's policy idea was translated into specific 2027 budget adjustments and its net fiscal effect.
-2. Map the policy into `parameters.budget_modifications` using:
-   - `DELTA_BN`: Add or subtract EUR billions from an existing category.
-   - `DELTA_PCT`: Increase or decrease an existing category by a decimal percentage (e.g., `-0.10` for -10%, `0.15` for +15%).
-   - `SET_ABSOLUTE_BN`: Set a category to an exact EUR billion target.
-   - `ABOLISH`: Remove or reduce a sub-program (specify the EUR billion savings in `value`, or `0.0` to eliminate the entire category).
-   - `NEW_LINE_BN`: Introduce a new revenue or expenditure program with `value` in EUR billions.
-3. If the policy alters income tax rates across population deciles (1=lowest, 10=highest), populate `parameters.tax_bracket_shifts`.
-4. If the policy introduces a per-capita household transfer, climate dividend, or negative income tax / basic grant, populate `parameters.transfer_formula`.
-5. Always evaluate policies grounded in the German institutional context, factoring in the social security system, differences in net wages, and real household consumption without relying on artificial deterministic rules.
-"""
+Extraction Rules (High-Speed Execution):
+1. `chat_feedback`: Strictly 1-2 concise, executive sentences. State the mapped budget action and resulting net borrowing effect. No conversational filler.
+2. `policy_name`: Punchy title under 5 words.
+3. `budget_modifications`: Output ONLY the modified line items using:
+   - `DELTA_BN` (+/- EUR billions), `DELTA_PCT` (decimal percent, e.g. -0.05), `SET_ABSOLUTE_BN`, `ABOLISH` (value in savings), or `NEW_LINE_BN`.
+4. `rationale` & `extracted_assumptions`: 1 short sentence each.
+5. If decile tax rates shift (1-10), populate `parameters.tax_bracket_shifts`. If per-capita transfer/dividend, populate `parameters.transfer_formula`.
+Respond strictly in valid JSON complying with the schema."""
 
 
 MACRO_AUDIT_INSTRUCTION = """You are an Independent Senior Fiscal Economist and Macroeconomic Auditor.
-Your role is to critically assess policy reform packages on the German Federal Budget.
-You have access to live institutional parameters and economic research.
+Assess the reform package on the German Federal Budget. Be sharp, analytically rigorous, and concise.
 
-Core Principles of Logical & Economic Consistency:
-1. Zero-Base Accounting Integrity (No Baseline-Carryover Fallacy):
-   - Always evaluate the post-reform world under the NEW rules established by the user's package.
-   - When a package abolishes, replaces, or reduces an existing baseline levy, contribution, fee, or program, that baseline element is ELIMINATED (set to 0) in the post-reform world.
-   - NEVER calculate post-reform marginal rates, household deductions, or budgetary costs by taking the old composite baseline and adding the replacement measure on top. Compute the post-reform burden strictly as the sum of surviving post-reform components (with abolished components equal to 0).
-   - If a new or higher tax/levy replaces an abolished baseline contribution/levy, recognize that this is a substitution/shift of financing; the net burden is the difference between the two, NOT their sum.
-2. Holistic Net Evaluation:
-   - When a package links offsetting changes, evaluate the combined net change in household disposable income, marginal incentives, and fiscal balance across the entire package combined.
-3. Check for Miscalculations & Unmodeled Feedback:
-   - Rigorously audit the static figures for arithmetic discrepancies, missing funding, or unmodeled behavioral/macroeconomic effects on net wages, private consumption, social security balances, and public borrowing.
-4. No Deterministic Fallacies:
-   - Reason dynamically from first principles and empirical evidence, maintaining strict internal consistency between your ledger and your conclusions.
-
+Core Principles:
+1. Zero-Base Accounting Integrity: Sum ONLY surviving/new components (abolished components strictly 0). Never add replacement levies on top of pre-reform baselines.
+2. Macro Transmission: Focus on disposable wages, domestic consumption, and dynamic feedback.
+3. Length: Keep `executive_critique` strictly to 2-3 concise, high-level sentences. Keep each factor to 1 sentence.
 Output strictly valid JSON complying with the requested schema."""
 
 
@@ -105,15 +76,17 @@ def _openai_chat_kwargs(model_name: str, desired_temperature: Optional[float] = 
     """
     Build kwargs for OpenAI completions.
     Models like GPT-6-Luna, o1, o3, and next-gen reasoning models reject custom temperature
-    values (OpenAI returns 400: "Unsupported value: 'temperature' does not support 0.1 with this model. Only the default (1) value is supported.").
-    For these models, omit the temperature parameter completely so OpenAI uses its internal default.
+    values (OpenAI returns 400). For those models, omit temperature and pass reasoning_effort="low"
+    to maximize response speed.
     """
     m = (model_name or "").lower()
+    kwargs: Dict[str, Any] = {}
     if any(k in m for k in ("gpt-6", "o1", "o3", "reasoning", "luna")):
-        return {}
+        kwargs["reasoning_effort"] = "low"
+        return kwargs
     if desired_temperature is not None:
-        return {"temperature": desired_temperature}
-    return {}
+        kwargs["temperature"] = desired_temperature
+    return kwargs
 
 
 class UnifiedPolicyExtractor:
@@ -189,6 +162,7 @@ class UnifiedPolicyExtractor:
                         + f"\n\nCRITICAL: Respond ONLY with a valid JSON object complying exactly with this schema:\n{schema_json}"
                     ),
                     tools=[{"type": "web_search_preview"}],
+                    reasoning={"effort": "low"},
                 )
                 output_text = getattr(resp, "output_text", "") or ""
                 citations: List[GroundingCitation] = []
