@@ -25,6 +25,9 @@ import {
   saveNewScenario,
   updateScenario,
   deleteScenario,
+  isAdminEmail,
+  getSetting,
+  setSetting,
   UserRecord,
   UserTier,
   TIER_LIMITS,
@@ -32,6 +35,7 @@ import {
 import {
   optionalAuthHook,
   requireAuthHook,
+  requireAdminHook,
   signUserToken,
   verifyPassword,
   hashPassword,
@@ -1379,15 +1383,19 @@ server.post("/api/auth/social", async (request: FastifyRequest, reply: FastifyRe
 server.get("/api/auth/me", async (request: FastifyRequest, reply: FastifyReply) => {
   await optionalAuthHook(request, reply);
   const user = request.user;
-  const tier: UserTier = user ? user.tier : "guest";
+  const is_admin = user ? (user.role === "admin" || isAdminEmail(user.email)) : false;
+  const tier: UserTier = user ? (is_admin ? "business" : user.tier) : "guest";
   const identifier = request.clientIdentifier || "guest_ip:127.0.0.1";
+  const activeModel = getSetting("active_model", "gpt-6-luna");
 
   const usage = getTodayUsage(identifier, tier);
 
   return reply.status(200).send({
     authenticated: !!user,
-    user: user || null,
+    user: user ? { ...user, role: is_admin ? "admin" : user.role, tier } : null,
+    is_admin,
     tier,
+    active_model: activeModel,
     usage: {
       current_count: usage.current_count,
       max_limit: usage.max_limit,
@@ -1401,10 +1409,10 @@ server.get("/api/auth/me", async (request: FastifyRequest, reply: FastifyReply) 
 
 /**
  * POST /api/auth/tier
- * Switch tier for testing / upgrading (free, pro, business).
+ * Switch tier for testing / upgrading (Restricted to platform administrator).
  */
 server.post("/api/auth/tier", async (request: FastifyRequest, reply: FastifyReply) => {
-  await requireAuthHook(request, reply);
+  await requireAdminHook(request, reply);
   const body = (request.body as Record<string, unknown>) || {};
   const requestedTier = body.tier as UserTier;
 
@@ -1429,6 +1437,78 @@ server.post("/api/auth/tier", async (request: FastifyRequest, reply: FastifyRepl
     },
     token: newToken,
     limits: TIER_LIMITS[requestedTier],
+  });
+});
+
+/**
+ * GET /api/admin/model
+ * Returns the currently active LLM model and selectable options from Fiscal Engine.
+ */
+server.get("/api/admin/model", async (request: FastifyRequest, reply: FastifyReply) => {
+  await requireAdminHook(request, reply);
+  try {
+    const upstream = await fetch(`${FISCAL_ENGINE_URL}/api/v1/model`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (upstream.ok) {
+      const data = await upstream.json();
+      return reply.status(200).send(data);
+    }
+  } catch {}
+
+  const activeModel = getSetting("active_model", "gpt-6-luna");
+  return reply.status(200).send({
+    active_model: activeModel,
+    provider: activeModel.startsWith("gemini-") ? "google" : "openai",
+  });
+});
+
+/**
+ * POST /api/admin/model
+ * Dynamically switches the active AI model (e.g. GPT-6-Luna, Gemini 3.8 Flash, etc.)
+ */
+server.post("/api/admin/model", async (request: FastifyRequest, reply: FastifyReply) => {
+  await requireAdminHook(request, reply);
+  const body = (request.body as Record<string, unknown>) || {};
+  const modelName = typeof body.model_name === "string" ? body.model_name.trim() : "";
+  const apiKey = typeof body.api_key === "string" ? body.api_key.trim() : undefined;
+
+  if (!modelName) {
+    throw new GatewayHttpError(400, "MISSING_MODEL", "model_name is required.");
+  }
+
+  setSetting("active_model", modelName);
+  process.env.ACTIVE_MODEL = modelName;
+  if (apiKey) {
+    setSetting("openai_api_key", apiKey);
+    process.env.OPENAI_API_KEY = apiKey;
+  }
+
+  // Forward update to Fiscal AI Engine
+  try {
+    const upstream = await fetch(`${FISCAL_ENGINE_URL}/api/v1/model`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_name: modelName, api_key: apiKey }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (upstream.ok) {
+      const data = (await upstream.json()) as any;
+      return reply.status(200).send({
+        status: "UPDATED",
+        active_model: modelName,
+        provider: data.provider,
+        message: `Active model successfully changed to ${modelName}.`,
+      });
+    }
+  } catch (err: any) {
+    console.warn("[Gateway] Failed to synchronize model with Fiscal Engine:", err.message);
+  }
+
+  return reply.status(200).send({
+    status: "UPDATED",
+    active_model: modelName,
+    message: `Active model updated in database to ${modelName}.`,
   });
 });
 

@@ -82,6 +82,8 @@ startProcess('FiscalEngine', colors.green, pythonExe, [
   '--port',
   '8000',
   '--reload',
+  '--reload-dir',
+  'fiscal_ai_engine',
 ]);
 
 // 2. Start Keycloak 26.0 IAM Server (if installed)

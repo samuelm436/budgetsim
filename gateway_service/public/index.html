@@ -1524,14 +1524,24 @@
               <button class="popover-item" onclick="closeAccountMenu(); openSaveScenarioModal();">
                 <span>Save Current State</span>
               </button>
-              <div class="popover-divider"></div>
-              <div style="font-size:0.65rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; padding:4px 10px 2px 10px;">
-                Plan & Limits
+              
+              <!-- Admin & Testing Controls: Exclusive to Platform Administrator -->
+              <div id="popover-admin-section" style="display:none;">
+                <div class="popover-divider"></div>
+                <div style="font-size:0.65rem; font-weight:700; color:#7c3aed; text-transform:uppercase; letter-spacing:0.05em; padding:4px 10px 2px 10px; display:flex; justify-content:space-between; align-items:center;">
+                  <span>Admin Controls</span>
+                  <span style="font-size:0.58rem; background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe; padding:1px 4px; border-radius:3px; font-weight:700;">STAFF</span>
+                </div>
+                <button class="popover-item" onclick="closeAccountMenu(); openModelSwitcherModal();" title="Configure AI engine model">
+                  <span>🤖 AI Model</span>
+                  <span id="popover-active-model-label" style="font-size:0.72rem; color:var(--accent); font-family:var(--font-mono); font-weight:700;">GPT-6-Luna &rsaquo;</span>
+                </button>
+                <button class="popover-item" onclick="closeAccountMenu(); openTierUpgradeModal();" title="Test different user tiers">
+                  <span>⚡ Testing: Switch Tier</span>
+                  <span id="popover-switch-tier-label" style="font-size:0.7rem; color:var(--text-muted);">Business &rsaquo;</span>
+                </button>
               </div>
-              <button class="popover-item" onclick="closeAccountMenu(); openTierUpgradeModal();">
-                <span>Switch / Test Tier</span>
-                <span id="popover-switch-tier-label" style="font-size:0.7rem; color:var(--accent);">Pro &rsaquo;</span>
-              </button>
+
               <div class="popover-divider"></div>
               <button class="popover-item danger" id="popover-auth-btn" onclick="handleAccountAction()">
                 Sign Out
@@ -2530,6 +2540,22 @@
       const authBtn = document.getElementById("popover-auth-btn");
       const switchTierLabel = document.getElementById("popover-switch-tier-label");
 
+      const isAdmin = !!(authData.is_admin || (authData.user && authData.user.role === "admin"));
+      const adminSection = document.getElementById("popover-admin-section");
+      if (adminSection) {
+        adminSection.style.display = isAdmin ? "block" : "none";
+      }
+
+      const adminModelLabel = document.getElementById("popover-active-model-label");
+      if (adminModelLabel && authData.active_model) {
+        adminModelLabel.innerText = `${authData.active_model} ›`;
+      }
+
+      const demoLoginsSection = document.getElementById("auth-demo-logins-section");
+      if (demoLoginsSection) {
+        demoLoginsSection.style.display = isAdmin ? "block" : "none";
+      }
+
       if (authData.authenticated && authData.user) {
         const u = authData.user;
         const tier = u.tier || "free";
@@ -2539,8 +2565,9 @@
         if (triggerContainer) {
           triggerContainer.innerHTML = `
             <button class="btn-account-pill" onclick="toggleAccountMenu(event)" title="Open Account Menu">
-              <span class="avatar-circle">${initial}</span>
+              <span class="avatar-circle" style="${isAdmin ? 'background:linear-gradient(135deg, #7c3aed, #4f46e5);' : ''}">${initial}</span>
               <span>${u.name}</span>
+              ${isAdmin ? '<span style="font-size:0.6rem; background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe; padding:1px 5px; border-radius:3px; font-weight:700;">ADMIN</span>' : ''}
               <span style="font-size:0.65rem; color:var(--text-muted);">&#9662;</span>
             </button>
           `;
@@ -2549,13 +2576,18 @@
         if (nameEl) nameEl.innerText = u.name;
         if (emailEl) emailEl.innerText = u.email;
         if (tierPill) {
-          tierPill.innerText = tier.toUpperCase();
+          tierPill.innerText = isAdmin ? "ADMIN UNLIMITED" : tier.toUpperCase();
+          if (isAdmin) {
+            tierPill.style.background = "#f5f3ff";
+            tierPill.style.color = "#7c3aed";
+            tierPill.style.border = "1px solid #ddd6fe";
+          }
         }
         if (switchTierLabel) switchTierLabel.innerText = `${tier.toUpperCase()} ›`;
 
-        const pct = Math.min(100, Math.max(0, (usage.remaining / Math.max(1, usage.max_limit)) * 100));
+        const pct = isAdmin ? 100 : Math.min(100, Math.max(0, (usage.remaining / Math.max(1, usage.max_limit)) * 100));
         if (quotaFill) quotaFill.style.width = `${pct}%`;
-        if (quotaText) quotaText.innerText = `${usage.remaining} / ${usage.max_limit} left today`;
+        if (quotaText) quotaText.innerText = isAdmin ? "Unlimited (Administrator Access)" : `${usage.remaining} / ${usage.max_limit} left today`;
 
         if (authBtn) {
           authBtn.innerText = "Sign Out";
@@ -2985,6 +3017,126 @@
       }
     }
 
+    // ========================================================================
+    // Admin AI Model Switching Controls
+    // ========================================================================
+    let availableModelsList = [
+      { id: "gpt-6-luna", name: "GPT-6-Luna (OpenAI)", provider: "openai", description: "High-knowledge, cost-efficient European-compliant reasoning model", recommended: true },
+      { id: "gpt-4o", name: "GPT-4o (OpenAI)", provider: "openai", description: "High-intelligence multimodal flagship model", recommended: false },
+      { id: "gpt-4o-mini", name: "GPT-4o-mini (OpenAI)", provider: "openai", description: "Fast, low-latency, budget-friendly OpenAI model", recommended: false },
+      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash (Google)", provider: "google", description: "DeepMind structured outputs with live Google Search grounding", recommended: false },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (Google)", provider: "google", description: "Google DeepMind fast policy model", recommended: false },
+      { id: "glm-5.7-flash", name: "GLM-5.7 Flash (Zhipu AI)", provider: "zhipu", description: "Ultra low-cost alternative model", recommended: false },
+    ];
+    let currentActiveModelId = "gpt-6-luna";
+
+    async function openModelSwitcherModal() {
+      const token = localStorage.getItem("govsim_auth_token");
+      const modal = document.getElementById("model-switcher-modal");
+      if (!modal) return;
+      modal.classList.remove("hidden");
+      const msgEl = document.getElementById("model-change-msg");
+      if (msgEl) msgEl.innerText = "";
+
+      try {
+        const res = await fetch("/api/admin/model", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentActiveModelId = data.active_model || "gpt-6-luna";
+          if (data.available_models) {
+            availableModelsList = data.available_models;
+          }
+          const keyStatusEl = document.getElementById("openai-key-status");
+          if (keyStatusEl) {
+            keyStatusEl.innerHTML = data.has_openai_key
+              ? `<span style="color:var(--positive); font-weight:600;">● OpenAI Key Configured</span>`
+              : `<span style="color:#d97706; font-weight:600;">○ Key Not Set</span>`;
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch remote model config:", err);
+      }
+
+      renderModelOptionsList();
+    }
+
+    function renderModelOptionsList() {
+      const listEl = document.getElementById("model-options-list");
+      if (!listEl) return;
+      const activeBadge = document.getElementById("active-model-badge");
+      if (activeBadge) activeBadge.innerText = currentActiveModelId;
+
+      listEl.innerHTML = availableModelsList.map(m => {
+        const isChecked = m.id === currentActiveModelId;
+        return `
+          <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid ${isChecked ? 'var(--accent)' : 'var(--border-light)'}; background:${isChecked ? '#eff6ff' : '#ffffff'}; border-radius:6px; cursor:pointer; transition:all 0.12s ease;">
+            <input type="radio" name="model_choice" value="${m.id}" ${isChecked ? 'checked' : ''} onchange="currentActiveModelId = '${m.id}'; renderModelOptionsList();" style="margin-top:3px;" />
+            <div style="flex:1;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; font-weight:700; color:var(--text-primary); font-family:var(--font-mono);">${m.name}</span>
+                ${m.recommended ? '<span style="font-size:0.62rem; font-weight:700; background:#dbeafe; color:#1d4ed8; padding:1px 5px; border-radius:3px; text-transform:uppercase;">Recommended</span>' : ''}
+              </div>
+              <div style="font-size:0.73rem; color:var(--text-muted); margin-top:2px;">${m.description}</div>
+            </div>
+          </label>
+        `;
+      }).join("");
+    }
+
+    function closeModelSwitcherModal() {
+      const modal = document.getElementById("model-switcher-modal");
+      if (modal) modal.classList.add("hidden");
+    }
+
+    async function handleModelChangeSubmit(e) {
+      e.preventDefault();
+      const token = localStorage.getItem("govsim_auth_token");
+      const msgEl = document.getElementById("model-change-msg");
+      const submitBtn = document.getElementById("btn-save-model");
+      const apiKey = document.getElementById("admin-openai-api-key")?.value?.trim();
+
+      msgEl.innerText = "Switching active model...";
+      msgEl.style.color = "var(--text-muted)";
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        const res = await fetch("/api/admin/model", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            model_name: currentActiveModelId,
+            api_key: apiKey || undefined
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          msgEl.innerText = `Error: ${data?.error?.message || data?.message || "Failed to switch model"}`;
+          msgEl.style.color = "var(--negative)";
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        msgEl.innerText = `✓ Active model successfully switched to ${currentActiveModelId}!`;
+        msgEl.style.color = "var(--positive)";
+        await refreshAuthMe();
+
+        setTimeout(() => {
+          closeModelSwitcherModal();
+          if (submitBtn) submitBtn.disabled = false;
+        }, 900);
+      } catch (err) {
+        msgEl.innerText = `Network error: ${err.message}`;
+        msgEl.style.color = "var(--negative)";
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    }
+
     initApp();
   </script>
 
@@ -3047,10 +3199,10 @@
           </button>
         </form>
 
-        <!-- Quick 1-Click Test Demo Logins -->
-        <div style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border-light);">
+        <!-- Quick 1-Click Test Demo Logins (Restricted to Administrator) -->
+        <div id="auth-demo-logins-section" style="display:none; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border-light);">
           <div style="font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">
-            ⚡ Quick 1-Click Demo Logins (Local Testing)
+            ⚡ Quick 1-Click Demo Logins (Admin Testing Only)
           </div>
           <div style="display:flex; gap:8px;">
             <button class="btn-auth btn-auth-secondary" style="flex:1; justify-content:center;" onclick="handleQuickLogin('free')">
@@ -3215,6 +3367,67 @@
           <button class="btn-tool" onclick="triggerImportFileInput()">Import JSON</button>
           <button class="btn-apply" style="padding: 6px 16px; font-size: 0.78rem;" onclick="closeReformsModal()">Close</button>
         </div>
+      </div>
+    </div>
+  </div>
+  <!-- Modal Dialog: Admin AI Model Control -->
+  <div id="model-switcher-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'model-switcher-modal') closeModelSwitcherModal()">
+    <div class="modal-window" style="max-width: 540px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-header-title" style="display:flex; align-items:center; gap:8px;">
+            <span>🤖 AI Policy Engine Model</span>
+            <span style="font-size:0.65rem; background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe; padding:2px 6px; border-radius:4px; font-weight:700;">ADMIN</span>
+          </div>
+          <div class="modal-header-sub">Configure the active LLM powering natural language policy extraction and macroeconomic auditing</div>
+        </div>
+        <button class="btn-modal-close" onclick="closeModelSwitcherModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="background:#ffffff;">
+        <form onsubmit="handleModelChangeSubmit(event)">
+          <!-- Current Active Status Pill -->
+          <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:6px; padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.78rem; color:var(--text-muted); font-weight:500;">Currently Active Model:</span>
+            <span id="active-model-badge" style="font-family:var(--font-mono); font-size:0.8rem; font-weight:700; color:var(--accent); background:#eff6ff; padding:3px 8px; border-radius:4px;">
+              gpt-6-luna
+            </span>
+          </div>
+
+          <!-- Model Choice Options -->
+          <div style="font-size:0.75rem; font-weight:700; color:var(--text-primary); margin-bottom:8px;">
+            Select Model Architecture:
+          </div>
+          <div id="model-options-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+            <!-- Dynamically populated model radio cards -->
+          </div>
+
+          <!-- OpenAI API Key Configuration -->
+          <div style="border-top:1px solid var(--border-light); padding-top:14px; margin-top:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label class="auth-form-label" style="margin-bottom:0;">OpenAI API Key (Required for GPT models)</label>
+              <span id="openai-key-status" style="font-size:0.7rem; color:var(--text-muted);">Checking...</span>
+            </div>
+            <input
+              type="password"
+              id="admin-openai-api-key"
+              class="auth-input"
+              placeholder="sk-proj-..."
+              autocomplete="off"
+            />
+            <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">
+              Enter your OpenAI API key to activate OpenAI models (GPT-6-Luna, GPT-4o). Saved securely in database.
+            </div>
+          </div>
+
+          <div id="model-change-msg" style="font-size:0.78rem; margin-top:12px;"></div>
+
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn-auth btn-auth-secondary" onclick="closeModelSwitcherModal()">Cancel</button>
+            <button type="submit" id="btn-save-model" class="btn-submit" style="padding:8px 20px; border-radius:5px;">
+              Save & Switch Model
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

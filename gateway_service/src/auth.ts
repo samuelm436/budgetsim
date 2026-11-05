@@ -244,3 +244,28 @@ export async function requireAuthHook(request: FastifyRequest, reply: FastifyRep
     });
   }
 }
+
+/**
+ * Middleware: Requires the user to have administrator role.
+ */
+export async function requireAdminHook(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await optionalAuthHook(request, reply);
+  if (!request.user) {
+    reply.status(401).send({
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Sign in with your administrator account to access this control.",
+      },
+    });
+    return;
+  }
+
+  if (request.user.role !== "admin") {
+    reply.status(403).send({
+      error: {
+        code: "FORBIDDEN",
+        message: "Access denied. Only the platform administrator (samuelmartin.nh16@gmail.com) can manage models and testing controls.",
+      },
+    });
+  }
+}

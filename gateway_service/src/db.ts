@@ -81,6 +81,30 @@ console.log(`[Database] Initializing GovSim SQLite database at: ${dbPath}`);
 
 export const db: SqliteDatabase = new Database(dbPath);
 
+export const ADMIN_EMAILS = ["samuelmartin.nh16@gmail.com"];
+
+export function isAdminEmail(email: string): boolean {
+  return ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
+
+export function getSetting(key: string, defaultValue: string = ""): string {
+  try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as any;
+    return row?.value || defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+export function setSetting(key: string, value: string): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(key, value, now);
+}
+
 // Enable foreign keys and WAL mode for high concurrency
 db.pragma("foreign_keys = ON");
 db.pragma("journal_mode = WAL");
@@ -98,6 +122,12 @@ export function initDatabase(): void {
       auth_provider TEXT DEFAULT 'local',
       auth_provider_id TEXT,
       created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
@@ -140,6 +170,19 @@ export function initDatabase(): void {
     );
   `);
 
+  // Ensure default active_model is set to gpt-6-luna
+  const currentModel = getSetting("active_model");
+  if (!currentModel) {
+    setSetting("active_model", "gpt-6-luna");
+  }
+
+  // Ensure samuelmartin.nh16@gmail.com is always role = 'admin' and tier = 'business'
+  for (const adminEmail of ADMIN_EMAILS) {
+    db.prepare(`
+      UPDATE users SET role = 'admin', tier = 'business' WHERE LOWER(email) = ?
+    `).run(adminEmail.toLowerCase());
+  }
+
   console.log("[Database] GovSim database schemas verified and initialized successfully.");
 }
 
@@ -153,13 +196,23 @@ initDatabase();
 export function findUserByEmail(email: string): UserRecord | null {
   const row = db.prepare("SELECT * FROM users WHERE email = ?").get(email.toLowerCase().trim()) as any;
   if (!row) return null;
-  return row as UserRecord;
+  const user = row as UserRecord;
+  if (isAdminEmail(user.email)) {
+    user.role = "admin";
+    user.tier = "business";
+  }
+  return user;
 }
 
 export function findUserById(id: string): UserRecord | null {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any;
   if (!row) return null;
-  return row as UserRecord;
+  const user = row as UserRecord;
+  if (isAdminEmail(user.email)) {
+    user.role = "admin";
+    user.tier = "business";
+  }
+  return user;
 }
 
 export function findUserByProvider(provider: string, providerId: string): UserRecord | null {
@@ -167,7 +220,12 @@ export function findUserByProvider(provider: string, providerId: string): UserRe
     .prepare("SELECT * FROM users WHERE auth_provider = ? AND auth_provider_id = ?")
     .get(provider, providerId) as any;
   if (!row) return null;
-  return row as UserRecord;
+  const user = row as UserRecord;
+  if (isAdminEmail(user.email)) {
+    user.role = "admin";
+    user.tier = "business";
+  }
+  return user;
 }
 
 export function createUser(user: {
@@ -181,13 +239,15 @@ export function createUser(user: {
   auth_provider_id?: string | null;
 }): UserRecord {
   const now = new Date().toISOString();
+  const emailNorm = user.email.toLowerCase().trim();
+  const isAdmin = isAdminEmail(emailNorm);
   const newUser: UserRecord = {
     id: user.id,
-    email: user.email.toLowerCase().trim(),
+    email: emailNorm,
     password_hash: user.password_hash || null,
     name: user.name,
-    tier: user.tier || "free",
-    role: user.role || "user",
+    tier: isAdmin ? "business" : user.tier || "free",
+    role: isAdmin ? "admin" : user.role || "user",
     auth_provider: user.auth_provider || "local",
     auth_provider_id: user.auth_provider_id || null,
     created_at: now,

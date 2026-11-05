@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from .schemas import (
     FiscalSummary,
@@ -80,20 +81,118 @@ Instructions:
 """
 
 
-class GeminiPolicyExtractor:
-    """Service for fast, structured LLM policy decomposition using `gemini-3.8-flash`."""
+MACRO_AUDIT_INSTRUCTION = """You are an Independent Senior Fiscal Economist and Macroeconomic Auditor.
+Your role is to critically assess policy reform packages on the German Federal Budget.
+You have access to live institutional parameters and economic research.
 
-    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None) -> None:
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-        if not self.api_key:
-            raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required.")
+Core Principles of Logical & Economic Consistency:
+1. Zero-Base Accounting Integrity (No Baseline-Carryover Fallacy):
+   - Always evaluate the post-reform world under the NEW rules established by the user's package.
+   - When a package abolishes, replaces, or reduces an existing baseline levy, contribution, fee, or program, that baseline element is ELIMINATED (set to 0) in the post-reform world.
+   - NEVER calculate post-reform marginal rates, household deductions, or budgetary costs by taking the old composite baseline and adding the replacement measure on top. Compute the post-reform burden strictly as the sum of surviving post-reform components (with abolished components equal to 0).
+   - If a new or higher tax/levy replaces an abolished baseline contribution/levy, recognize that this is a substitution/shift of financing; the net burden is the difference between the two, NOT their sum.
+2. Holistic Net Evaluation:
+   - When a package links offsetting changes, evaluate the combined net change in household disposable income, marginal incentives, and fiscal balance across the entire package combined.
+3. Check for Miscalculations & Unmodeled Feedback:
+   - Rigorously audit the static figures for arithmetic discrepancies, missing funding, or unmodeled behavioral/macroeconomic effects on net wages, private consumption, social security balances, and public borrowing.
+4. No Deterministic Fallacies:
+   - Reason dynamically from first principles and empirical evidence, maintaining strict internal consistency between your ledger and your conclusions.
+
+Output strictly valid JSON complying with the requested schema."""
+
+
+class UnifiedPolicyExtractor:
+    """Multi-provider LLM extractor supporting OpenAI (GPT-6-Luna, GPT-4o, etc.),
+    Google Gemini (gemini-3.8-flash, gemini-2.5-flash), and GLM models."""
+
+    def __init__(self, model_name: Optional[str] = None) -> None:
+        self.model_name = (
+            model_name
+            or os.getenv("ACTIVE_MODEL")
+            or os.getenv("OPENAI_MODEL")
+            or "gpt-6-luna"
+        )
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.openai_base_url = os.getenv("OPENAI_BASE_URL")
+
+    def get_provider(self) -> str:
+        m = self.model_name.lower()
+        if m.startswith("gemini-"):
+            return "google"
+        elif m.startswith("glm-"):
+            return "zhipu"
+        else:
+            return "openai"
+
+    def set_model(self, model_name: str, api_key: Optional[str] = None) -> None:
+        self.model_name = model_name
+        if api_key:
+            if self.get_provider() == "google":
+                self.gemini_api_key = api_key
+                os.environ["GEMINI_API_KEY"] = api_key
+            else:
+                self.openai_api_key = api_key
+                os.environ["OPENAI_API_KEY"] = api_key
+        os.environ["ACTIVE_MODEL"] = model_name
 
     def extract_policy(
         self, raw_prompt: str, enable_search_grounding: bool = False
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
-        """Extract structured policy parameters via Gemini API. Strictly no deterministic fallback."""
-        return self._extract_via_gemini(raw_prompt, enable_search_grounding)
+        """Extract structured policy parameters via the active LLM provider."""
+        provider = self.get_provider()
+        if provider == "google":
+            return self._extract_via_gemini(raw_prompt, enable_search_grounding)
+        else:
+            return self._extract_via_openai(raw_prompt)
+
+    def _extract_via_openai(
+        self, raw_prompt: str
+    ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
+        """Extract policy using OpenAI model (e.g. GPT-6-Luna, GPT-4o)."""
+        from openai import OpenAI
+
+        api_key = self.openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                f"OPENAI_API_KEY is required to run simulations with OpenAI model '{self.model_name}'. "
+                "Please configure OPENAI_API_KEY in your .env or the admin panel."
+            )
+
+        client = OpenAI(api_key=api_key, base_url=self.openai_base_url)
+
+        try:
+            completion = client.beta.chat.completions.parse(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": SYSTEM_EXTRACTION_INSTRUCTION},
+                    {"role": "user", "content": raw_prompt},
+                ],
+                response_format=PolicyExtractionSchema,
+                temperature=0.1,
+            )
+            parsed = completion.choices[0].message.parsed
+            if not parsed:
+                raise ValueError("Parsed output was null.")
+            return parsed, f"OPENAI_STRUCTURED_{self.model_name.upper()}", []
+        except Exception as e:
+            logger.warning("Beta parse failed for %s (%s), falling back to json_object", self.model_name, e)
+            completion = client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": SYSTEM_EXTRACTION_INSTRUCTION
+                        + "\n\nCRITICAL: Respond ONLY with a valid JSON object matching the PolicyExtractionSchema schema.",
+                    },
+                    {"role": "user", "content": raw_prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+            content = completion.choices[0].message.content or "{}"
+            parsed = PolicyExtractionSchema.model_validate_json(content)
+            return parsed, f"OPENAI_JSON_{self.model_name.upper()}", []
 
     def _extract_via_gemini(
         self, raw_prompt: str, enable_search_grounding: bool
@@ -102,7 +201,11 @@ class GeminiPolicyExtractor:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=self.api_key)
+        api_key = self.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is required for Gemini models.")
+
+        client = genai.Client(api_key=api_key)
         tools = [types.Tool(google_search=types.GoogleSearch())] if enable_search_grounding else None
 
         config = types.GenerateContentConfig(
@@ -129,7 +232,6 @@ class GeminiPolicyExtractor:
 
     @staticmethod
     def _parse_grounding_metadata(response: Any) -> List[GroundingCitation]:
-        """Extract web search citations from Gemini candidate grounding metadata."""
         citations: List[GroundingCitation] = []
         try:
             candidates = getattr(response, "candidates", None) or []
@@ -158,12 +260,18 @@ class GeminiPolicyExtractor:
         applied_proposals: List[Dict[str, Any]],
         active_summary: Optional[FiscalSummary],
     ) -> MacroAssessmentCritiqueSchema:
-        """Call Gemini to critically evaluate the reform package and calculate dynamic macroeconomic feedback."""
-        from google import genai
-        from google.genai import types
+        """Call active LLM to critically evaluate the reform package."""
+        provider = self.get_provider()
+        if provider == "google":
+            return self._assess_via_gemini(applied_proposals, active_summary)
+        else:
+            return self._assess_via_openai(applied_proposals, active_summary)
 
-        client = genai.Client(api_key=self.api_key)
-
+    def _build_macro_prompt(
+        self,
+        applied_proposals: List[Dict[str, Any]],
+        active_summary: Optional[FiscalSummary],
+    ) -> str:
         proposals_text = ""
         for i, p in enumerate(applied_proposals, 1):
             name = p.get("policy_name", "Reform")
@@ -191,7 +299,7 @@ class GeminiPolicyExtractor:
             else ""
         )
 
-        prompt_content = f"""Critically audit and assess this accumulated reform package modifying the German Federal Budget:
+        return f"""Critically audit and assess this accumulated reform package modifying the German Federal Budget:
 
 Baseline Reference & Current Active Post-Reform Budget State:
 - Active Total Expenditures: €{cur_exp:.2f}B
@@ -217,7 +325,7 @@ Your Evaluation Focus:
 3. Social Security System, Net Wages & Household Consumption:
    - Factor in how the post-reform rules (accounting for all abolished, replaced, and newly introduced measures together) affect statutory social systems, net take-home wages across income groups, and resulting shifts in private household consumption and indirect taxes.
 4. Live Empirical Grounding:
-   - Use Google Search freely to verify actual institutional data, macroeconomic indicators, and empirical research.
+   - Factor in actual institutional parameters, macroeconomic indicators, and empirical research.
 
 Provide:
 1. `net_accounting_ledger`: Explicit zero-base accounting ledger calculating post-reform totals by setting abolished components to 0 before summing surviving/new components.
@@ -227,29 +335,72 @@ Provide:
 5. `factors`: Key macroeconomic transmission channels reflecting the net post-reform state.
 6. `suggested_line_corrections`: Specific line adjustments (using the exact `category_key` identifiers listed above) in EUR billions to correct miscalculations and reflect dynamic economic feedback."""
 
-        macro_instruction = """You are an Independent Senior Fiscal Economist and Macroeconomic Auditor.
-Your role is to critically assess policy reform packages on the German Federal Budget.
-You have access to Google Search to look up current empirical data, institutional parameters, and economic research.
+    def _assess_via_openai(
+        self,
+        applied_proposals: List[Dict[str, Any]],
+        active_summary: Optional[FiscalSummary],
+    ) -> MacroAssessmentCritiqueSchema:
+        from openai import OpenAI
 
-Core Principles of Logical & Economic Consistency:
-1. Zero-Base Accounting Integrity (No Baseline-Carryover Fallacy):
-   - Always evaluate the post-reform world under the NEW rules established by the user's package.
-   - When a package abolishes, replaces, or reduces an existing baseline levy, contribution, fee, or program, that baseline element is ELIMINATED (set to 0) in the post-reform world.
-   - NEVER calculate post-reform marginal rates, household deductions, or budgetary costs by taking the old composite baseline and adding the replacement measure on top. Compute the post-reform burden strictly as the sum of surviving post-reform components (with abolished components equal to 0).
-   - If a new or higher tax/levy replaces an abolished baseline contribution/levy, recognize that this is a substitution/shift of financing; the net burden is the difference between the two, NOT their sum.
-2. Holistic Net Evaluation:
-   - When a package links offsetting changes, evaluate the combined net change in household disposable income, marginal incentives, and fiscal balance across the entire package combined.
-3. Check for Miscalculations & Unmodeled Feedback:
-   - Rigorously audit the static figures for arithmetic discrepancies, missing funding, or unmodeled behavioral/macroeconomic effects on net wages, private consumption, social security balances, and public borrowing.
-4. No Deterministic Fallacies:
-   - Reason dynamically from first principles and live empirical evidence via Google Search, maintaining strict internal consistency between your ledger and your conclusions.
+        api_key = self.openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                f"OPENAI_API_KEY is required for macroeconomic assessment with OpenAI model '{self.model_name}'."
+            )
 
-Output strictly valid JSON complying with the requested schema."""
+        client = OpenAI(api_key=api_key, base_url=self.openai_base_url)
+        prompt_content = self._build_macro_prompt(applied_proposals, active_summary)
 
+        try:
+            completion = client.beta.chat.completions.parse(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": MACRO_AUDIT_INSTRUCTION},
+                    {"role": "user", "content": prompt_content},
+                ],
+                response_format=MacroAssessmentCritiqueSchema,
+                temperature=0.2,
+            )
+            parsed = completion.choices[0].message.parsed
+            if not parsed:
+                raise ValueError("Parsed critique was null.")
+            return parsed
+        except Exception as e:
+            logger.warning("Beta parse failed for macro critique (%s), falling back to json_object", e)
+            completion = client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": MACRO_AUDIT_INSTRUCTION
+                        + "\n\nRespond ONLY with a valid JSON object complying with the MacroAssessmentCritiqueSchema schema.",
+                    },
+                    {"role": "user", "content": prompt_content},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,
+            )
+            content = completion.choices[0].message.content or "{}"
+            return MacroAssessmentCritiqueSchema.model_validate_json(content)
+
+    def _assess_via_gemini(
+        self,
+        applied_proposals: List[Dict[str, Any]],
+        active_summary: Optional[FiscalSummary],
+    ) -> MacroAssessmentCritiqueSchema:
+        from google import genai
+        from google.genai import types
+
+        api_key = self.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is required for Gemini models.")
+
+        client = genai.Client(api_key=api_key)
+        prompt_content = self._build_macro_prompt(applied_proposals, active_summary)
         tools = [types.Tool(google_search=types.GoogleSearch())]
 
         config = types.GenerateContentConfig(
-            system_instruction=macro_instruction,
+            system_instruction=MACRO_AUDIT_INSTRUCTION,
             response_mime_type="application/json",
             response_schema=MacroAssessmentCritiqueSchema,
             temperature=0.2,
@@ -269,13 +420,17 @@ Output strictly valid JSON complying with the requested schema."""
         return MacroAssessmentCritiqueSchema.model_validate_json(response.text)
 
 
+# Singleton extractor instance to allow dynamic model switching across requests
+_extractor_instance = UnifiedPolicyExtractor()
+
+
 # FastAPI Dependency Providers
 def get_simulator() -> FiscalSimulator:
     return FiscalSimulator(baseline=GERMANY_2027_DRAFT_BASELINE)
 
 
-def get_policy_extractor() -> GeminiPolicyExtractor:
-    return GeminiPolicyExtractor()
+def get_policy_extractor() -> UnifiedPolicyExtractor:
+    return _extractor_instance
 
 
 app = FastAPI(
@@ -299,19 +454,101 @@ app.add_middleware(
 )
 
 
+class ModelConfigRequest(BaseModel):
+    model_name: str
+    api_key: Optional[str] = None
+    provider: Optional[str] = None
+
+
 @app.get("/health", tags=["System"])
-async def health_check() -> Dict[str, Any]:
+async def health_check(extractor: UnifiedPolicyExtractor = Depends(get_policy_extractor)) -> Dict[str, Any]:
     """Liveness and readiness probe for the Python simulation microservice."""
-    has_gemini_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
-    model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    has_gemini_key = bool(extractor.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    has_openai_key = bool(extractor.openai_api_key or os.getenv("OPENAI_API_KEY"))
     return {
         "status": "healthy",
         "service": "fiscal_ai_engine",
         "version": "2.0.0",
-        "model": model_name,
+        "model": extractor.model_name,
+        "provider": extractor.get_provider(),
         "baseline": "Germany Federal Budget 2027 Government Draft (Regierungsentwurf 2027)",
+        "openai_api_configured": has_openai_key,
         "gemini_api_configured": has_gemini_key,
         "supported_countries": ["DE"],
+    }
+
+
+@app.get("/api/v1/model", tags=["Model"])
+async def get_model_info(
+    extractor: UnifiedPolicyExtractor = Depends(get_policy_extractor),
+) -> Dict[str, Any]:
+    """Return active model configuration, provider, and available selectable models."""
+    return {
+        "active_model": extractor.model_name,
+        "provider": extractor.get_provider(),
+        "available_models": [
+            {
+                "id": "gpt-6-luna",
+                "name": "GPT-6-Luna (OpenAI)",
+                "provider": "openai",
+                "description": "High-knowledge, cost-efficient European-compliant reasoning model",
+                "recommended": True,
+            },
+            {
+                "id": "gpt-4o",
+                "name": "GPT-4o (OpenAI)",
+                "provider": "openai",
+                "description": "High-intelligence multimodal flagship model",
+                "recommended": False,
+            },
+            {
+                "id": "gpt-4o-mini",
+                "name": "GPT-4o-mini (OpenAI)",
+                "provider": "openai",
+                "description": "Fast, low-latency, budget-friendly OpenAI model",
+                "recommended": False,
+            },
+            {
+                "id": "gemini-3.8-flash",
+                "name": "Gemini 3.8 Flash (Google)",
+                "provider": "google",
+                "description": "Google DeepMind structured outputs with live Google Search grounding",
+                "recommended": False,
+            },
+            {
+                "id": "gemini-2.5-flash",
+                "name": "Gemini 2.5 Flash (Google)",
+                "provider": "google",
+                "description": "Google DeepMind high-speed policy model",
+                "recommended": False,
+            },
+            {
+                "id": "glm-5.7-flash",
+                "name": "GLM-5.7 Flash (Zhipu AI)",
+                "provider": "zhipu",
+                "description": "Ultra low-cost alternative with comparable reasoning performance",
+                "recommended": False,
+            },
+        ],
+        "has_openai_key": bool(extractor.openai_api_key or os.getenv("OPENAI_API_KEY")),
+        "has_gemini_key": bool(extractor.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+    }
+
+
+@app.post("/api/v1/model", tags=["Model"])
+async def set_model_info(
+    req: ModelConfigRequest,
+    extractor: UnifiedPolicyExtractor = Depends(get_policy_extractor),
+) -> Dict[str, Any]:
+    """Dynamically switch the active LLM model and optional API credentials."""
+    extractor.set_model(req.model_name, req.api_key)
+    logger.info("Switched active model to %s (%s)", extractor.model_name, extractor.get_provider())
+    return {
+        "status": "UPDATED",
+        "active_model": extractor.model_name,
+        "provider": extractor.get_provider(),
+        "has_openai_key": bool(extractor.openai_api_key or os.getenv("OPENAI_API_KEY")),
+        "has_gemini_key": bool(extractor.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
     }
 
 
