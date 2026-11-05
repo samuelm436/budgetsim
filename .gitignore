@@ -3,6 +3,14 @@
 .env.*
 !.env.example
 
+# Local SQLite Database Files
+*.sqlite3
+*.sqlite3-*
+*.db
+data/*.sqlite3*
+data/keycloak_postgres/
+!data/.gitkeep
+
 # Python virtual environment & cache
 .venv/
 venv/

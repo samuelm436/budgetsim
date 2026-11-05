@@ -11,6 +11,30 @@ import path from "path";
 import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
+import {
+  db,
+  findUserByEmail,
+  findUserById,
+  createUser,
+  updateUserTier,
+  checkAndIncrementUsage,
+  getTodayUsage,
+  listUserScenarios,
+  getScenarioById,
+  saveNewScenario,
+  updateScenario,
+  deleteScenario,
+  UserTier,
+  TIER_LIMITS,
+} from "./db";
+import {
+  optionalAuthHook,
+  requireAuthHook,
+  signUserToken,
+  verifyPassword,
+  hashPassword,
+  syncExternalUser,
+} from "./auth";
 
 // ============================================================================
 // Typed Interfaces (Mirrors Python OpenAPI / Pydantic Schemas)
@@ -280,6 +304,24 @@ export const server: FastifyInstance = Fastify({
   bodyLimit: 1048576, // 1MB
 });
 
+// Safely handle empty JSON bodies on DELETE / POST requests
+server.addContentTypeParser(
+  "application/json",
+  { parseAs: "string" },
+  (_req, body: string, done) => {
+    if (!body || body.trim() === "") {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(body));
+    } catch (err: any) {
+      err.statusCode = 400;
+      done(err, undefined);
+    }
+  }
+);
+
 // Alias for backwards compatibility
 export const app = server;
 
@@ -469,6 +511,31 @@ async function handleProposeScenario(
   const gatewayReceivedAt = new Date().toISOString();
   const proposalId = generateProposalId();
 
+  // Tier limit check & rate limiting
+  await optionalAuthHook(request, reply);
+  const user = request.user;
+  const tier: UserTier = user ? user.tier : "guest";
+  const identifier = request.clientIdentifier || "guest_ip:127.0.0.1";
+
+  const usageCheck = checkAndIncrementUsage(identifier, tier);
+  if (!usageCheck.allowed) {
+    return reply.status(429).send({
+      error: {
+        code: "TIER_LIMIT_REACHED",
+        message: usageCheck.message,
+        tier: usageCheck.tier,
+        current_count: usageCheck.current_count,
+        max_limit: usageCheck.max_limit,
+        reset_in_hours: usageCheck.reset_in_hours,
+      },
+    });
+  }
+
+  // Set rate-limiting & tier headers
+  reply.header("X-GovSim-Tier", usageCheck.tier);
+  reply.header("X-GovSim-Queries-Remaining", usageCheck.remaining.toString());
+  reply.header("X-GovSim-Queries-Limit", usageCheck.max_limit.toString());
+
   await ensureInitialBudgetLoaded();
   const validatedPayload = validateScenarioRequest(request.body);
 
@@ -552,7 +619,7 @@ async function handleProposeScenario(
     apply_button: simulationResult.apply_action,
   };
 
-  const envelope: GatewayProposalEnvelope = {
+  const envelope: GatewayProposalEnvelope & { usage?: any } = {
     proposal_id: proposalId,
     status: "PROPOSED",
     gateway_received_at: gatewayReceivedAt,
@@ -562,6 +629,13 @@ async function handleProposeScenario(
       calculation_card: calculationCard,
     },
     simulation: simulationResult,
+    usage: {
+      tier: usageCheck.tier,
+      current_count: usageCheck.current_count,
+      max_limit: usageCheck.max_limit,
+      remaining: usageCheck.remaining,
+      reset_in_hours: usageCheck.reset_in_hours,
+    },
   };
 
   proposalRegistry.set(proposalId, envelope);
@@ -910,6 +984,372 @@ server.get("/api/scenarios", async (_request: FastifyRequest, reply: FastifyRepl
   }));
   return reply.status(200).send({ count: summaries.length, proposals: summaries });
 });
+
+// ============================================================================
+// User Authentication & Identity Endpoints (Keycloak / Google / Apple / Local)
+// ============================================================================
+
+/**
+ * POST /api/auth/register
+ * Creates a new user in SQLite and returns a JWT token.
+ */
+server.post("/api/auth/register", async (request: FastifyRequest, reply: FastifyReply) => {
+  const body = (request.body as Record<string, unknown>) || {};
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+
+  if (!email || !email.includes("@")) {
+    throw new GatewayHttpError(400, "INVALID_EMAIL", "A valid email address is required.");
+  }
+  if (!password || password.length < 6) {
+    throw new GatewayHttpError(400, "WEAK_PASSWORD", "Password must be at least 6 characters long.");
+  }
+
+  const existing = findUserByEmail(email);
+  if (existing) {
+    throw new GatewayHttpError(409, "USER_EXISTS", "An account with this email address already exists.");
+  }
+
+  const passwordHash = await hashPassword(password);
+  const newUser = createUser({
+    id: crypto.randomUUID(),
+    email,
+    password_hash: passwordHash,
+    name: name || email.split("@")[0],
+    tier: "free",
+    role: "user",
+    auth_provider: "local",
+  });
+
+  const token = signUserToken(newUser);
+  return reply.status(201).send({
+    status: "CREATED",
+    token,
+    user: {
+      id: newUser.id,
+      email: newUser.email,
+      name: newUser.name,
+      tier: newUser.tier,
+      role: newUser.role,
+      provider: newUser.auth_provider,
+    },
+    message: "Welcome to GovSim AI! You are on the Free Tier (10 simulations/day).",
+  });
+});
+
+/**
+ * POST /api/auth/login
+ * Validates credentials and returns a JWT session token.
+ */
+server.post("/api/auth/login", async (request: FastifyRequest, reply: FastifyReply) => {
+  const body = (request.body as Record<string, unknown>) || {};
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!email || !password) {
+    throw new GatewayHttpError(400, "MISSING_CREDENTIALS", "Email and password are required.");
+  }
+
+  const user = findUserByEmail(email);
+  if (!user || !user.password_hash) {
+    throw new GatewayHttpError(401, "INVALID_CREDENTIALS", "Invalid email or password.");
+  }
+
+  const isValid = await verifyPassword(password, user.password_hash);
+  if (!isValid) {
+    throw new GatewayHttpError(401, "INVALID_CREDENTIALS", "Invalid email or password.");
+  }
+
+  const token = signUserToken(user);
+  return reply.status(200).send({
+    status: "AUTHENTICATED",
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      tier: user.tier,
+      role: user.role,
+      provider: user.auth_provider,
+    },
+  });
+});
+
+/**
+ * POST /api/auth/social
+ * Handles federated authentication (Keycloak SSO, Google, Apple ID tokens).
+ * Automatically provisions or links the user account in SQLite.
+ */
+server.post("/api/auth/social", async (request: FastifyRequest, reply: FastifyReply) => {
+  const body = (request.body as Record<string, unknown>) || {};
+  const provider = body.provider as "keycloak" | "google" | "apple";
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const providerId = (body.providerId as string) || (body.sub as string) || `prov_${Date.now()}`;
+  const tier = (body.tier as UserTier) || "free";
+
+  if (!provider || !["keycloak", "google", "apple"].includes(provider)) {
+    throw new GatewayHttpError(400, "INVALID_PROVIDER", "Provider must be 'keycloak', 'google', or 'apple'.");
+  }
+  if (!email || !email.includes("@")) {
+    throw new GatewayHttpError(400, "INVALID_EMAIL", "A valid email is required from the OAuth provider.");
+  }
+
+  const user = syncExternalUser({
+    email,
+    name: name || email.split("@")[0],
+    provider,
+    providerId,
+    tier,
+  });
+
+  const token = signUserToken(user);
+  return reply.status(200).send({
+    status: "AUTHENTICATED",
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      tier: user.tier,
+      role: user.role,
+      provider: user.auth_provider,
+    },
+  });
+});
+
+/**
+ * GET /api/auth/me
+ * Returns current authenticated user and today's usage statistics / limits.
+ */
+server.get("/api/auth/me", async (request: FastifyRequest, reply: FastifyReply) => {
+  await optionalAuthHook(request, reply);
+  const user = request.user;
+  const tier: UserTier = user ? user.tier : "guest";
+  const identifier = request.clientIdentifier || "guest_ip:127.0.0.1";
+
+  const usage = getTodayUsage(identifier, tier);
+
+  return reply.status(200).send({
+    authenticated: !!user,
+    user: user || null,
+    tier,
+    usage: {
+      current_count: usage.current_count,
+      max_limit: usage.max_limit,
+      remaining: usage.remaining,
+      reset_in_hours: usage.reset_in_hours,
+      allowed: usage.allowed,
+    },
+    limits: TIER_LIMITS[tier],
+  });
+});
+
+/**
+ * POST /api/auth/tier
+ * Switch tier for testing / upgrading (free, pro, business).
+ */
+server.post("/api/auth/tier", async (request: FastifyRequest, reply: FastifyReply) => {
+  await requireAuthHook(request, reply);
+  const body = (request.body as Record<string, unknown>) || {};
+  const requestedTier = body.tier as UserTier;
+
+  if (!requestedTier || !["free", "pro", "business"].includes(requestedTier)) {
+    throw new GatewayHttpError(400, "INVALID_TIER", "Tier must be 'free', 'pro', or 'business'.");
+  }
+
+  updateUserTier(request.user!.id, requestedTier);
+  const updatedUser = findUserById(request.user!.id)!;
+  const newToken = signUserToken(updatedUser);
+
+  return reply.status(200).send({
+    status: "TIER_UPDATED",
+    message: `Account upgraded to ${TIER_LIMITS[requestedTier].label}.`,
+    user: {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      tier: updatedUser.tier,
+      role: updatedUser.role,
+      provider: updatedUser.auth_provider,
+    },
+    token: newToken,
+    limits: TIER_LIMITS[requestedTier],
+  });
+});
+
+// ============================================================================
+// Multi-Scenario Database Management (Replaces JSON File Downloads)
+// ============================================================================
+
+/**
+ * GET /api/scenarios/saves
+ * Lists all scenarios saved in SQLite for the authenticated user.
+ */
+server.get("/api/scenarios/saves", async (request: FastifyRequest, reply: FastifyReply) => {
+  await requireAuthHook(request, reply);
+  const scenarios = listUserScenarios(request.user!.id);
+  return reply.status(200).send({
+    count: scenarios.length,
+    scenarios,
+  });
+});
+
+/**
+ * POST /api/scenarios/saves
+ * Saves the current active diagram state into the SQLite database under a user-defined title.
+ */
+server.post("/api/scenarios/saves", async (request: FastifyRequest, reply: FastifyReply) => {
+  await requireAuthHook(request, reply);
+  await ensureInitialBudgetLoaded();
+
+  const body = (request.body as Record<string, unknown>) || {};
+  const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : "Untitled Fiscal Scenario";
+  const description = typeof body.description === "string" ? body.description.trim() : "";
+  const tags = Array.isArray(body.tags) ? (body.tags as string[]) : [];
+
+  const scenarioId = `scen_${crypto.randomUUID()}`;
+  const saved = saveNewScenario({
+    id: scenarioId,
+    user_id: request.user!.id,
+    title,
+    description,
+    tags,
+    active_summary: activeBudgetState.active_summary || activeBudgetState.initial_2027_summary,
+    active_bar_chart: activeBudgetState.active_bar_chart,
+    active_sankey_graph: activeBudgetState.active_sankey_graph,
+    applied_proposals: activeBudgetState.applied_proposals,
+  });
+
+  return reply.status(201).send({
+    status: "SAVED",
+    message: `Scenario '${saved.title}' saved successfully to your cloud database.`,
+    scenario: saved,
+  });
+});
+
+/**
+ * GET /api/scenarios/saves/:id
+ * Loads a saved scenario from SQLite directly into the active diagram workspace.
+ */
+server.get<{ Params: { id: string } }>(
+  "/api/scenarios/saves/:id",
+  async (request, reply) => {
+    await requireAuthHook(request, reply);
+    await ensureInitialBudgetLoaded();
+
+    const scenario = getScenarioById(request.params.id, request.user!.id);
+    if (!scenario) {
+      throw new GatewayHttpError(404, "SCENARIO_NOT_FOUND", "Saved scenario was not found in your account.");
+    }
+
+    // Restore into active diagram state
+    activeBudgetState.active_summary = scenario.active_summary;
+    activeBudgetState.active_bar_chart = scenario.active_bar_chart;
+    activeBudgetState.active_sankey_graph = scenario.active_sankey_graph;
+    activeBudgetState.applied_proposals = scenario.applied_proposals;
+
+    // Register proposals in proposalRegistry for card lookups
+    (scenario.applied_proposals as AppliedProposalRecord[]).forEach((p: AppliedProposalRecord) => {
+      if (p.proposal_id && !proposalRegistry.has(p.proposal_id)) {
+        const dummyEnvelope: GatewayProposalEnvelope = {
+          proposal_id: p.proposal_id,
+          status: "APPLIED",
+          gateway_received_at: p.applied_at || new Date().toISOString(),
+          applied_at: p.applied_at,
+          execution_time_ms: 0,
+          chat_reply: {
+            feedback_text: p.short_description || "",
+            calculation_card: p.calculation_card || {
+              proposal_id: p.proposal_id,
+              title: p.policy_name,
+              policy_domain: p.policy_domain,
+              chat_feedback: p.short_description,
+              total_revenue_delta_bn: p.revenue_delta_bn ?? 0,
+              total_expenditure_delta_bn: p.expenditure_delta_bn ?? 0,
+              net_budget_impact_bn: p.net_budget_impact_bn ?? 0,
+              line_item_deltas: p.line_item_deltas ?? [],
+              apply_button: {
+                can_apply: false,
+                status: "APPLIED",
+                button_label: "Applied to Budget",
+                apply_endpoint: `/api/scenarios/${p.proposal_id}/apply`,
+              },
+            },
+          },
+          simulation: {} as SimulationResult,
+        };
+        proposalRegistry.set(p.proposal_id, dummyEnvelope);
+      }
+    });
+
+    return reply.status(200).send({
+      status: "LOADED",
+      scenario_id: scenario.id,
+      title: scenario.title,
+      description: scenario.description,
+      applied_reforms_count: scenario.applied_proposals.length,
+      active_diagram: activeBudgetState,
+    });
+  }
+);
+
+/**
+ * PUT /api/scenarios/saves/:id
+ * Updates or overwrites an existing scenario with the current active budget state.
+ */
+server.put<{ Params: { id: string } }>(
+  "/api/scenarios/saves/:id",
+  async (request, reply) => {
+    await requireAuthHook(request, reply);
+    const body = (request.body as Record<string, unknown>) || {};
+    const title = typeof body.title === "string" ? body.title : undefined;
+    const description = typeof body.description === "string" ? body.description : undefined;
+    const overwriteWithActive = body.overwrite_with_active === true;
+
+    const updates: any = {};
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+
+    if (overwriteWithActive) {
+      updates.active_summary = activeBudgetState.active_summary || activeBudgetState.initial_2027_summary;
+      updates.active_bar_chart = activeBudgetState.active_bar_chart;
+      updates.active_sankey_graph = activeBudgetState.active_sankey_graph;
+      updates.applied_proposals = activeBudgetState.applied_proposals;
+    }
+
+    const success = updateScenario(request.params.id, request.user!.id, updates);
+    if (!success) {
+      throw new GatewayHttpError(404, "SCENARIO_NOT_FOUND", "Saved scenario was not found.");
+    }
+
+    return reply.status(200).send({
+      status: "UPDATED",
+      message: "Scenario updated successfully.",
+    });
+  }
+);
+
+/**
+ * DELETE /api/scenarios/saves/:id
+ * Deletes a scenario from the database.
+ */
+server.delete<{ Params: { id: string } }>(
+  "/api/scenarios/saves/:id",
+  async (request, reply) => {
+    await requireAuthHook(request, reply);
+    const success = deleteScenario(request.params.id, request.user!.id);
+    if (!success) {
+      throw new GatewayHttpError(404, "SCENARIO_NOT_FOUND", "Saved scenario was not found.");
+    }
+    return reply.status(200).send({
+      status: "DELETED",
+      id: request.params.id,
+      message: "Scenario deleted from database.",
+    });
+  }
+);
 
 // ============================================================================
 // Standard Error Handling in Fastify

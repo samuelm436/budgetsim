@@ -1,0 +1,77 @@
+# GovSim AI — Single-Container All-in-One Image
+# Combines: Fastify Gateway (Node.js 22) + Python 3.12 Fiscal Engine + SQLite Data Volume
+FROM python:3.12-slim-bookworm
+
+# Install Node.js 22, Supervisor, and Build Essentials
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    supervisor \
+    build-essential \
+    ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 1. Install Python Engine dependencies
+COPY fiscal_ai_engine/requirements.txt /app/fiscal_ai_engine/
+RUN pip install --no-cache-dir -r /app/fiscal_ai_engine/requirements.txt
+
+# 2. Install Node.js Gateway dependencies
+COPY gateway_service/package.json gateway_service/package-lock.json* /app/gateway_service/
+WORKDIR /app/gateway_service
+RUN npm ci --omit=dev || npm install --omit=dev
+
+# 3. Copy source codes
+WORKDIR /app
+COPY fiscal_ai_engine /app/fiscal_ai_engine
+COPY gateway_service /app/gateway_service
+
+# Create persistent data directory for SQLite
+RUN mkdir -p /app/data
+
+# Environment configuration
+ENV PORT=3000 \
+    FISCAL_ENGINE_URL=http://127.0.0.1:8000 \
+    DB_PATH=/app/data/govsim.sqlite3 \
+    NODE_ENV=production
+
+# 4. Supervisor configuration to orchestrate both microservices in one container
+RUN echo '[supervisord]\n\
+nodaemon=true\n\
+logfile=/dev/null\n\
+pidfile=/tmp/supervisord.pid\n\
+\n\
+[program:fiscal_engine]\n\
+command=uvicorn fiscal_ai_engine.main:app --host 127.0.0.1 --port 8000\n\
+directory=/app\n\
+autostart=true\n\
+autorestart=true\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+\n\
+[program:gateway_service]\n\
+command=node dist/index.js\n\
+directory=/app/gateway_service\n\
+autostart=true\n\
+autorestart=true\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+' > /etc/supervisor/conf.d/govsim.conf
+
+# Build Gateway TypeScript to JS
+WORKDIR /app/gateway_service
+RUN npx tsc
+
+WORKDIR /app
+
+VOLUME ["/app/data"]
+EXPOSE 3000
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/govsim.conf"]

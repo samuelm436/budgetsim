@@ -1,0 +1,96 @@
+{
+  "realm": "govsim",
+  "displayName": "GovSim AI — Identity & Access Management",
+  "displayNameHtml": "<b>GovSim AI</b> Identity",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "free",
+        "description": "GovSim Free Tier User (10 simulations/day)"
+      },
+      {
+        "name": "pro",
+        "description": "GovSim Pro Tier (Journalist / Enterprise, 250 simulations/day)"
+      },
+      {
+        "name": "business",
+        "description": "GovSim Business / Unlimited Tier"
+      }
+    ]
+  },
+  "defaultRoles": [
+    "free"
+  ],
+  "clients": [
+    {
+      "clientId": "govsim-web",
+      "name": "GovSim Web Client & API Gateway",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "rootUrl": "http://localhost:3000",
+      "baseUrl": "http://localhost:3000",
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "attributes": {
+        "access.token.lifespan": "86400"
+      }
+    }
+  ],
+  "identityProviders": [
+    {
+      "alias": "google",
+      "displayName": "Google",
+      "providerId": "google",
+      "enabled": true,
+      "updateProfileFirstLoginMode": "off",
+      "trustEmail": true,
+      "storeToken": false,
+      "addReadTokenRoleOnCreate": false,
+      "authenticateByDefault": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+        "clientSecret": "YOUR_GOOGLE_CLIENT_SECRET",
+        "defaultScope": "openid profile email"
+      }
+    },
+    {
+      "alias": "apple",
+      "displayName": "Apple",
+      "providerId": "apple",
+      "enabled": true,
+      "updateProfileFirstLoginMode": "off",
+      "trustEmail": true,
+      "storeToken": false,
+      "addReadTokenRoleOnCreate": false,
+      "authenticateByDefault": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "com.govsim.auth",
+        "teamId": "YOUR_APPLE_TEAM_ID",
+        "keyId": "YOUR_APPLE_KEY_ID",
+        "defaultScope": "name email"
+      }
+    }
+  ]
+}

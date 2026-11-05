@@ -1072,6 +1072,198 @@
     .side-pill.expenditure { background: #e2e8f0; color: #334155; }
     .side-pill.financing { background: #fef3c7; color: #92400e; }
 
+    /* Auth Header & User Status */
+    .auth-container {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .auth-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.72rem;
+      padding: 5px 9px;
+      border-radius: 4px;
+      font-weight: 600;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-strong);
+      color: var(--text-secondary);
+      user-select: none;
+    }
+
+    .auth-badge.guest {
+      border-color: #f59e0b;
+      background: #fffbeb;
+      color: #b45309;
+    }
+
+    .auth-badge.free {
+      border-color: #3b82f6;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    .auth-badge.pro {
+      border-color: #10b981;
+      background: #ecfdf5;
+      color: #047857;
+    }
+
+    .auth-badge.business {
+      border-color: #8b5cf6;
+      background: #f5f3ff;
+      color: #6d28d9;
+    }
+
+    .btn-auth {
+      font-size: 0.74rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-auth-primary {
+      background: var(--brand);
+      color: #ffffff;
+      border: 1px solid var(--brand);
+    }
+    .btn-auth-primary:hover {
+      background: #1e293b;
+    }
+
+    .btn-auth-secondary {
+      background: var(--bg-panel);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+    }
+    .btn-auth-secondary:hover {
+      background: var(--bg-subtle);
+    }
+
+    .scenario-pill {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #e2e8f0;
+      color: #334155;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Social Auth Buttons */
+    .social-btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .social-btn {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.15s;
+      border: 1px solid var(--border-strong);
+      background: #ffffff;
+      color: var(--text-primary);
+    }
+
+    .social-btn:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+    }
+
+    .social-btn.google:hover { border-color: #4285f4; }
+    .social-btn.apple { background: #000000; color: #ffffff; border: 1px solid #000000; }
+    .social-btn.apple:hover { background: #1c1c1e; }
+    .social-btn.keycloak { background: #0284c7; color: #ffffff; border: 1px solid #0284c7; }
+    .social-btn.keycloak:hover { background: #0369a1; }
+
+    .auth-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border-light);
+      margin-bottom: 16px;
+    }
+
+    .auth-tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+    }
+
+    .auth-tab.active {
+      border-bottom-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .auth-form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .auth-form-label {
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .auth-input {
+      padding: 8px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+
+    .auth-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    .scenario-card-item {
+      background: #ffffff;
+      border: 1px solid var(--border-light);
+      border-radius: 6px;
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.15s;
+    }
+
+    .scenario-card-item:hover {
+      border-color: var(--accent);
+      box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -1153,12 +1345,17 @@
         </div>
       </section>
 
-      <!-- Sub-Toolbar (Reforms status, Export/Import & Reset) -->
+      <!-- Sub-Toolbar (Reforms status, Scenario Database Saves & Auth) -->
       <div class="view-toolbar">
-        <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">
-          2027 Federal Budget Overview (Regierungsentwurf)
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">
+            2027 Budget Overview
+          </div>
+          <span id="active-scenario-tag" class="scenario-pill" title="Active Fiscal Scenario">Baseline 2027 Draft</span>
         </div>
         <div class="toolbar-right">
+          <button class="btn-tool" onclick="openSaveScenarioModal()" title="Save current reform scenario to cloud database">💾 Save Scenario</button>
+          <button class="btn-tool" onclick="openMyScenariosModal()" title="Load or manage your saved scenarios">📂 My Scenarios <span id="scenario-count-badge" style="font-weight:700;">(0)</span></button>
           <button
             class="applied-count-badge"
             id="applied-badge"
@@ -1167,14 +1364,8 @@
           >
             0 Reforms Applied &rsaquo;
           </button>
-          <input
-            type="file"
-            id="package-file-input"
-            accept=".json,application/json"
-            style="display: none;"
-            onchange="handlePackageFileSelect(event)"
-          />
-          <button class="btn-reset" onclick="resetTo2027Draft()">Reset to 2027 Draft</button>
+          <div id="auth-status-container" class="auth-container"></div>
+          <button class="btn-reset" onclick="resetTo2027Draft()">Reset</button>
         </div>
       </div>
 
@@ -1263,6 +1454,7 @@
 
     async function initApp() {
       try {
+        await initAuth();
         const res = await fetch("/api/diagram/state");
         const state = await res.json();
         initial2027Summary = state.initial_2027_summary || state.active_summary;
@@ -1494,11 +1686,14 @@
       sendBtn.innerText = "Simulating...";
 
       const enableGrounding = document.getElementById("chk-grounding").checked;
+      const headers = { "Content-Type": "application/json" };
+      const token = localStorage.getItem("govsim_auth_token");
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       try {
         const res = await fetch("/api/scenarios/run", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             raw_prompt: prompt,
             build_on_active_diagram: true,
@@ -1508,10 +1703,23 @@
 
         const data = await res.json();
         if (!res.ok) {
+          if (res.status === 429 || data?.error?.code === "TIER_LIMIT_REACHED") {
+            showLimitExceededModal(data.error);
+            appendErrorBubble(`⚠️ Limit Reached: ${data.error.message}`);
+            return;
+          }
           const errDetail = data?.error?.details?.detail || data?.error?.message || `HTTP ${res.status}`;
           appendErrorBubble(errDetail);
           return;
         }
+
+        // Refresh usage display
+        if (data.usage) {
+          updateUsageDisplay(data.usage);
+        } else {
+          refreshAuthMe();
+        }
+
         appendProposalBubble(data);
       } catch (err) {
         appendErrorBubble(`Connection error: ${err.message}`);
@@ -2030,8 +2238,725 @@
       }
     }
 
+    // ========================================================================
+    // Authentication, Tiers & Rate Limit Client State
+    // ========================================================================
+
+    let currentAuthUser = null;
+    let currentAuthUsage = null;
+    let authModalTab = "login";
+    let activeScenarioId = null;
+
+    async function initAuth() {
+      await refreshAuthMe();
+    }
+
+    async function refreshAuthMe() {
+      const token = localStorage.getItem("govsim_auth_token");
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      try {
+        const res = await fetch("/api/auth/me", { headers });
+        const data = await res.json();
+        currentAuthUser = data.user;
+        currentAuthUsage = data.usage;
+        renderAuthStatus(data);
+        if (data.authenticated) {
+          refreshScenariosCount();
+        } else {
+          const badge = document.getElementById("scenario-count-badge");
+          if (badge) badge.innerText = "(0)";
+        }
+      } catch (err) {
+        console.error("Failed to fetch auth status:", err);
+      }
+    }
+
+    function updateUsageDisplay(usage) {
+      currentAuthUsage = usage;
+      if (currentAuthUser) {
+        currentAuthUser.tier = usage.tier;
+      }
+      renderAuthStatus({
+        authenticated: !!currentAuthUser,
+        user: currentAuthUser,
+        tier: usage.tier,
+        usage: usage
+      });
+    }
+
+    function renderAuthStatus(authData) {
+      const container = document.getElementById("auth-status-container");
+      if (!container) return;
+
+      if (authData.authenticated && authData.user) {
+        const u = authData.user;
+        const tier = u.tier || "free";
+        const usage = authData.usage || { remaining: 10, max_limit: 10 };
+        const initial = (u.name || u.email).slice(0, 1).toUpperCase();
+
+        container.innerHTML = `
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:var(--brand); color:#fff; font-size:0.75rem; font-weight:700;">
+              ${initial}
+            </div>
+            <span style="font-size:0.78rem; font-weight:600; color:var(--text-primary); max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${u.name}</span>
+            <span class="auth-badge ${tier}" title="${usage.remaining} simulations remaining today">
+              ${tier.toUpperCase()}: ${usage.remaining}/${usage.max_limit}
+            </span>
+            <button class="btn-auth btn-auth-secondary" onclick="openTierUpgradeModal()" title="Switch or test tier limits">
+              ⚡ Tiers
+            </button>
+            <button class="btn-auth btn-auth-secondary" onclick="logoutUser()" title="Sign out of GovSim">
+              Sign Out
+            </button>
+          </div>
+        `;
+      } else {
+        const usage = authData.usage || { remaining: 1, max_limit: 1 };
+        container.innerHTML = `
+          <span class="auth-badge guest" title="1 free simulation preview">
+            Guest: ${usage.remaining}/1 Left
+          </span>
+          <button class="btn-auth btn-auth-secondary" onclick="openAuthModal('login')">
+            Sign In
+          </button>
+          <button class="btn-auth btn-auth-primary" onclick="openAuthModal('register')">
+            Register Free
+          </button>
+        `;
+      }
+    }
+
+    function openAuthModal(tab = "login") {
+      authModalTab = tab;
+      switchAuthTab(tab);
+      document.getElementById("auth-modal").classList.remove("hidden");
+    }
+
+    function closeAuthModal() {
+      document.getElementById("auth-modal").classList.add("hidden");
+      document.getElementById("auth-error-msg").innerText = "";
+    }
+
+    function switchAuthTab(tab) {
+      authModalTab = tab;
+      document.getElementById("tab-login").className = `auth-tab ${tab === 'login' ? 'active' : ''}`;
+      document.getElementById("tab-register").className = `auth-tab ${tab === 'register' ? 'active' : ''}`;
+      document.getElementById("auth-name-group").style.display = tab === "register" ? "flex" : "none";
+      document.getElementById("btn-auth-submit").innerText = tab === "register" ? "Create Free Account" : "Sign In to GovSim";
+      document.getElementById("auth-modal-title").innerText = tab === "register" ? "Create GovSim Account" : "Sign In to GovSim AI";
+      document.getElementById("auth-error-msg").innerText = "";
+    }
+
+    async function handleEmailAuth(e) {
+      e.preventDefault();
+      const email = document.getElementById("auth-email").value.trim();
+      const password = document.getElementById("auth-password").value;
+      const name = document.getElementById("auth-name").value.trim();
+      const errorEl = document.getElementById("auth-error-msg");
+      errorEl.innerText = "";
+
+      const endpoint = authModalTab === "register" ? "/api/auth/register" : "/api/auth/login";
+      const payload = { email, password };
+      if (authModalTab === "register") payload.name = name;
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          errorEl.innerText = data?.error?.message || "Authentication failed.";
+          return;
+        }
+
+        localStorage.setItem("govsim_auth_token", data.token);
+        closeAuthModal();
+        await refreshAuthMe();
+      } catch (err) {
+        errorEl.innerText = `Network error: ${err.message}`;
+      }
+    }
+
+    async function handleSocialLogin(provider) {
+      const errorEl = document.getElementById("auth-error-msg");
+      errorEl.innerText = "";
+
+      let email = "";
+      let name = "";
+      let tier = "free";
+
+      if (provider === "google") {
+        email = prompt("Enter Google Account Email for authentication:", "analyst.google@example.com");
+        if (!email) return;
+        name = email.split("@")[0].replace(".", " ");
+      } else if (provider === "apple") {
+        email = prompt("Enter Apple ID Email:", "user.apple@privaterelay.appleid.com");
+        if (!email) return;
+        name = "Apple User";
+      } else if (provider === "keycloak") {
+        email = prompt("Enter Keycloak Single Sign-On Username/Email:", "journalist@keycloak.govsim.eu");
+        if (!email) return;
+        name = "Keycloak SSO Analyst";
+        tier = "pro";
+      }
+
+      try {
+        const res = await fetch("/api/auth/social", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider,
+            email,
+            name,
+            tier
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          errorEl.innerText = data?.error?.message || "Social login failed.";
+          return;
+        }
+
+        localStorage.setItem("govsim_auth_token", data.token);
+        closeAuthModal();
+        await refreshAuthMe();
+      } catch (err) {
+        errorEl.innerText = `Social login error: ${err.message}`;
+      }
+    }
+
+    async function handleQuickLogin(tier) {
+      const email = `demo.${tier}@govsim.eu`;
+      const name = `${tier.toUpperCase()} Fiscal Analyst`;
+
+      try {
+        const res = await fetch("/api/auth/social", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "local",
+            email,
+            name,
+            tier
+          })
+        });
+
+        const data = await res.json();
+        if (data.token) {
+          localStorage.setItem("govsim_auth_token", data.token);
+          closeAuthModal();
+          await refreshAuthMe();
+        }
+      } catch (err) {
+        alert(`Quick login failed: ${err.message}`);
+      }
+    }
+
+    function logoutUser() {
+      localStorage.removeItem("govsim_auth_token");
+      currentAuthUser = null;
+      activeScenarioId = null;
+      document.getElementById("active-scenario-tag").innerText = "Baseline 2027 Draft";
+      refreshAuthMe();
+    }
+
+    // ========================================================================
+    // Multi-Scenario Database Saves (Replacing JSON files)
+    // ========================================================================
+
+    async function refreshScenariosCount() {
+      const token = localStorage.getItem("govsim_auth_token");
+      if (!token) return;
+
+      try {
+        const res = await fetch("/api/scenarios/saves", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data && typeof data.count === "number") {
+          const badge = document.getElementById("scenario-count-badge");
+          if (badge) badge.innerText = `(${data.count})`;
+        }
+      } catch (err) {
+        console.error("Failed to refresh scenario count:", err);
+      }
+    }
+
+    function openSaveScenarioModal() {
+      if (!currentAuthUser) {
+        openAuthModal("register");
+        return;
+      }
+      const titleInput = document.getElementById("save-scenario-title");
+      const defaultTitle = currentAppliedProposals.length > 0
+        ? `Reform Package (${currentAppliedProposals.length} policy changes)`
+        : `Custom 2027 Budget Proposal`;
+      titleInput.value = defaultTitle;
+      document.getElementById("save-scenario-desc").value = "";
+      document.getElementById("save-scenario-modal").classList.remove("hidden");
+    }
+
+    function closeSaveScenarioModal() {
+      document.getElementById("save-scenario-modal").classList.add("hidden");
+    }
+
+    async function handleSaveScenarioSubmit(e) {
+      e.preventDefault();
+      const token = localStorage.getItem("govsim_auth_token");
+      if (!token) {
+        openAuthModal("login");
+        return;
+      }
+
+      const title = document.getElementById("save-scenario-title").value.trim() || "Untitled Scenario";
+      const description = document.getElementById("save-scenario-desc").value.trim();
+      const btn = document.getElementById("btn-submit-save-scenario");
+      btn.disabled = true;
+      btn.innerText = "Saving to Database...";
+
+      try {
+        const res = await fetch("/api/scenarios/saves", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ title, description })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`Failed to save scenario: ${data?.error?.message || res.statusText}`);
+          return;
+        }
+
+        activeScenarioId = data.scenario.id;
+        document.getElementById("active-scenario-tag").innerText = data.scenario.title;
+        document.getElementById("active-scenario-tag").title = `Saved Scenario: ${data.scenario.title}`;
+        closeSaveScenarioModal();
+        await refreshScenariosCount();
+        alert(`✓ Scenario '${data.scenario.title}' saved to your cloud database!`);
+      } catch (err) {
+        alert(`Network error saving scenario: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Save to Database";
+      }
+    }
+
+    async function openMyScenariosModal() {
+      if (!currentAuthUser) {
+        openAuthModal("login");
+        return;
+      }
+
+      const token = localStorage.getItem("govsim_auth_token");
+      const listContainer = document.getElementById("my-scenarios-list");
+      listContainer.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">Loading your saved scenarios from database...</div>`;
+      document.getElementById("my-scenarios-modal").classList.remove("hidden");
+
+      try {
+        const res = await fetch("/api/scenarios/saves", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const scenarios = data.scenarios || [];
+
+        if (scenarios.length === 0) {
+          listContainer.innerHTML = `
+            <div class="modal-empty-state">
+              <h4>No Saved Scenarios Yet</h4>
+              <p>You haven't saved any fiscal scenarios yet. Apply reforms on the left, then click <strong>💾 Save Scenario</strong>.</p>
+              <button class="btn-auth btn-auth-primary" onclick="closeMyScenariosModal(); openSaveScenarioModal();">Save Current State as Scenario</button>
+            </div>
+          `;
+          return;
+        }
+
+        let html = "";
+        scenarios.forEach(s => {
+          const dateStr = new Date(s.updated_at).toLocaleDateString() + " " + new Date(s.updated_at).toLocaleTimeString();
+          const isActive = s.id === activeScenarioId;
+
+          html += `
+            <div class="scenario-card-item" style="${isActive ? 'border-color:var(--accent); background:#f8fafc;' : ''}">
+              <div style="flex:1;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:0.92rem; font-weight:700; color:var(--text-primary);">${s.title}</span>
+                  ${isActive ? `<span class="calc-domain-tag" style="background:#dbeafe; color:#1e40af;">ACTIVE</span>` : ''}
+                </div>
+                <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:3px;">
+                  ${s.description || 'No notes added'}
+                </div>
+                <div style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); margin-top:4px;">
+                  ${s.applied_reforms_count} reform(s) &bull; Last updated: ${dateStr}
+                </div>
+              </div>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <button class="btn-auth btn-auth-primary" onclick="loadSavedScenario('${s.id}')" title="Load into active workspace">
+                  Load
+                </button>
+                <button class="btn-auth btn-auth-secondary" onclick="overwriteSavedScenario('${s.id}')" title="Overwrite with currently active budget">
+                  Update
+                </button>
+                <button class="btn-auth btn-auth-secondary" style="color:var(--negative); border-color:#fca5a5;" onclick="deleteSavedScenario('${s.id}')" title="Delete scenario">
+                  Delete
+                </button>
+              </div>
+            </div>
+          `;
+        });
+
+        listContainer.innerHTML = html;
+      } catch (err) {
+        listContainer.innerHTML = `<div style="color:var(--negative); padding:16px;">Failed to load scenarios: ${err.message}</div>`;
+      }
+    }
+
+    function closeMyScenariosModal() {
+      document.getElementById("my-scenarios-modal").classList.add("hidden");
+    }
+
+    async function loadSavedScenario(id) {
+      const token = localStorage.getItem("govsim_auth_token");
+      try {
+        const res = await fetch(`/api/scenarios/saves/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`Failed to load scenario: ${data?.error?.message || res.statusText}`);
+          return;
+        }
+
+        activeScenarioId = id;
+        document.getElementById("active-scenario-tag").innerText = data.title;
+        document.getElementById("active-scenario-tag").title = `Active Scenario: ${data.title}`;
+
+        const activeDiagram = data.active_diagram;
+        initial2027Summary = activeDiagram.initial_2027_summary || initial2027Summary;
+        activeSummary = activeDiagram.active_summary;
+        activeBarChart = activeDiagram.active_bar_chart;
+        currentAppliedProposals = activeDiagram.applied_proposals || [];
+
+        renderDashboard(
+          initial2027Summary,
+          activeSummary,
+          activeBarChart,
+          currentAppliedProposals
+        );
+
+        closeMyScenariosModal();
+      } catch (err) {
+        alert(`Error loading scenario: ${err.message}`);
+      }
+    }
+
+    async function overwriteSavedScenario(id) {
+      if (!confirm("Are you sure you want to overwrite this saved scenario with the current active budget state?")) return;
+      const token = localStorage.getItem("govsim_auth_token");
+      try {
+        const res = await fetch(`/api/scenarios/saves/${id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ overwrite_with_active: true })
+        });
+        if (res.ok) {
+          alert("✓ Scenario updated with current active budget!");
+          openMyScenariosModal();
+        }
+      } catch (err) {
+        alert(`Failed to update scenario: ${err.message}`);
+      }
+    }
+
+    async function deleteSavedScenario(id) {
+      if (!confirm("Delete this saved scenario permanently?")) return;
+      const token = localStorage.getItem("govsim_auth_token");
+      try {
+        const res = await fetch(`/api/scenarios/saves/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          if (activeScenarioId === id) {
+            activeScenarioId = null;
+            document.getElementById("active-scenario-tag").innerText = "Baseline 2027 Draft";
+          }
+          await refreshScenariosCount();
+          openMyScenariosModal();
+        }
+      } catch (err) {
+        alert(`Failed to delete scenario: ${err.message}`);
+      }
+    }
+
+    // ========================================================================
+    // Tier Limits & Upgrade Modals
+    // ========================================================================
+
+    function showLimitExceededModal(errorInfo) {
+      const modal = document.getElementById("limit-modal");
+      const titleEl = document.getElementById("limit-modal-title");
+      const descEl = document.getElementById("limit-modal-desc");
+      const actionBtn = document.getElementById("btn-limit-action");
+
+      const tier = errorInfo?.tier || "guest";
+      if (tier === "guest") {
+        titleEl.innerText = "Guest Preview Limit Reached (1/1 Simulation)";
+        descEl.innerText = "You have used your 1 free simulation as a guest. Create a free account in 5 seconds to unlock 10 simulations every day, or upgrade to Pro for 250 daily simulations and cloud-saved scenarios!";
+        actionBtn.innerText = "Register Free Account (10/Day)";
+        actionBtn.onclick = () => { closeLimitModal(); openAuthModal('register'); };
+      } else {
+        titleEl.innerText = `Daily Limit Reached (${errorInfo?.max_limit || 10}/${errorInfo?.max_limit || 10})`;
+        descEl.innerText = `You have reached your daily simulation limit. Your quota resets at 00:00 UTC (in ~${errorInfo?.reset_in_hours || 8} hours). Upgrade to Pro for 250 simulations/day or Business for unlimited access!`;
+        actionBtn.innerText = "Upgrade to Pro Tier";
+        actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
+      }
+
+      modal.classList.remove("hidden");
+    }
+
+    function closeLimitModal() {
+      document.getElementById("limit-modal").classList.add("hidden");
+    }
+
+    function openTierUpgradeModal() {
+      if (!currentAuthUser) {
+        openAuthModal("login");
+        return;
+      }
+      document.getElementById("upgrade-modal").classList.remove("hidden");
+    }
+
+    function closeTierUpgradeModal() {
+      document.getElementById("upgrade-modal").classList.add("hidden");
+    }
+
+    async function switchTierTest(targetTier) {
+      const token = localStorage.getItem("govsim_auth_token");
+      try {
+        const res = await fetch("/api/auth/tier", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ tier: targetTier })
+        });
+        const data = await res.json();
+        if (data.token) {
+          localStorage.setItem("govsim_auth_token", data.token);
+        }
+        closeTierUpgradeModal();
+        await refreshAuthMe();
+        alert(`✓ Account switched to ${data.user.tier.toUpperCase()} tier!`);
+      } catch (err) {
+        alert(`Failed to switch tier: ${err.message}`);
+      }
+    }
+
     initApp();
   </script>
+
+  <!-- Modal Dialog: Authentication (Keycloak SSO / Google / Apple / Email) -->
+  <div id="auth-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'auth-modal') closeAuthModal()">
+    <div class="modal-window" style="max-width: 440px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-header-title" id="auth-modal-title">Sign In to GovSim AI</div>
+          <div class="modal-header-sub">Save multiple scenarios & access 2027 Federal Budget simulations</div>
+        </div>
+        <button class="btn-modal-close" onclick="closeAuthModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="background:#ffffff;">
+        <!-- Social & Keycloak SSO Buttons -->
+        <div class="social-btn-group">
+          <button class="social-btn google" onclick="handleSocialLogin('google')">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            Continue with Google
+          </button>
+          <button class="social-btn apple" onclick="handleSocialLogin('apple')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.4c.66-.82 1.11-1.96.99-3.1-.97.04-2.16.65-2.85 1.46-.61.71-1.14 1.87-.99 2.98 1.09.08 2.2-.53 2.85-1.34z"/></svg>
+            Continue with Apple
+          </button>
+          <button class="social-btn keycloak" onclick="handleSocialLogin('keycloak')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/></svg>
+            Sign in with Keycloak (SSO)
+          </button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; margin: 14px 0;">
+          <div style="flex:1; height:1px; background:var(--border-light);"></div>
+          <span style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">or continue with email</span>
+          <div style="flex:1; height:1px; background:var(--border-light);"></div>
+        </div>
+
+        <!-- Auth Tabs: Login vs Register -->
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
+          <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Create Account</button>
+        </div>
+
+        <form onsubmit="handleEmailAuth(event)">
+          <div class="auth-form-group" id="auth-name-group" style="display:none;">
+            <label class="auth-form-label">Full Name</label>
+            <input type="text" id="auth-name" class="auth-input" placeholder="e.g. Samuel Martin" />
+          </div>
+          <div class="auth-form-group">
+            <label class="auth-form-label">Email Address</label>
+            <input type="email" id="auth-email" class="auth-input" placeholder="name@example.com" required />
+          </div>
+          <div class="auth-form-group">
+            <label class="auth-form-label">Password</label>
+            <input type="password" id="auth-password" class="auth-input" placeholder="••••••••" required />
+          </div>
+          <div id="auth-error-msg" style="color:var(--negative); font-size:0.78rem; margin-bottom:10px;"></div>
+          <button type="submit" id="btn-auth-submit" class="btn-submit" style="width:100%; padding:10px; border-radius:5px;">
+            Sign In to GovSim AI
+          </button>
+        </form>
+
+        <!-- Quick 1-Click Test Demo Logins -->
+        <div style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border-light);">
+          <div style="font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">
+            ⚡ Quick 1-Click Demo Logins (Local Testing)
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-auth btn-auth-secondary" style="flex:1; justify-content:center;" onclick="handleQuickLogin('free')">
+              Free Tier (10/Day)
+            </button>
+            <button class="btn-auth btn-auth-secondary" style="flex:1; justify-content:center; color:var(--positive); border-color:#a7f3d0;" onclick="handleQuickLogin('pro')">
+              ⭐ Pro Tier (Unlimited)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: Save Current Scenario -->
+  <div id="save-scenario-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'save-scenario-modal') closeSaveScenarioModal()">
+    <div class="modal-window" style="max-width: 500px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-header-title">💾 Save Scenario to Cloud Database</div>
+          <div class="modal-header-sub">Saves your active reform package and budget state to your account</div>
+        </div>
+        <button class="btn-modal-close" onclick="closeSaveScenarioModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="background:#ffffff;">
+        <form onsubmit="handleSaveScenarioSubmit(event)">
+          <div class="auth-form-group">
+            <label class="auth-form-label">Scenario Title</label>
+            <input type="text" id="save-scenario-title" class="auth-input" placeholder="e.g. Mittelstandsentlastung & Rail 2027" required />
+          </div>
+          <div class="auth-form-group">
+            <label class="auth-form-label">Description / Working Notes (Optional)</label>
+            <textarea id="save-scenario-desc" class="auth-input" rows="3" placeholder="Notes on fiscal assumptions, trade-offs, or political rationale..."></textarea>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn-auth btn-auth-secondary" onclick="closeSaveScenarioModal()">Cancel</button>
+            <button type="submit" id="btn-submit-save-scenario" class="btn-submit" style="padding:8px 18px; border-radius:5px;">
+              Save to Database
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: My Saved Scenarios -->
+  <div id="my-scenarios-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'my-scenarios-modal') closeMyScenariosModal()">
+    <div class="modal-window" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-header-title">📂 My Saved Fiscal Scenarios</div>
+          <div class="modal-header-sub">Load, update, or compare your saved reform packages in SQLite</div>
+        </div>
+        <button class="btn-modal-close" onclick="closeMyScenariosModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="my-scenarios-list" style="max-height: 480px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn-auth btn-auth-secondary" onclick="closeMyScenariosModal(); openSaveScenarioModal();">
+          + Save New Scenario
+        </button>
+        <button class="btn-apply" style="padding: 6px 16px; font-size: 0.78rem;" onclick="closeMyScenariosModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: Tier Limit Reached -->
+  <div id="limit-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'limit-modal') closeLimitModal()">
+    <div class="modal-window" style="max-width: 480px;">
+      <div class="modal-header" style="background:#fffbeb; border-bottom-color:#fde68a;">
+        <div>
+          <div class="modal-header-title" id="limit-modal-title" style="color:#92400e;">⚠️ Simulation Limit Reached</div>
+          <div class="modal-header-sub" style="color:#b45309;">GovSim AI Tier Quota</div>
+        </div>
+        <button class="btn-modal-close" onclick="closeLimitModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="background:#ffffff;">
+        <p id="limit-modal-desc" style="font-size:0.86rem; line-height:1.6; color:var(--text-secondary); margin-bottom:16px;">
+          You have reached your limit. Upgrade to continue running microsimulations.
+        </p>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button class="btn-auth btn-auth-secondary" onclick="closeLimitModal()">Dismiss</button>
+          <button id="btn-limit-action" class="btn-submit" style="padding:8px 18px; border-radius:5px;">
+            Upgrade Account
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: Test Tier Switcher -->
+  <div id="upgrade-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'upgrade-modal') closeTierUpgradeModal()">
+    <div class="modal-window" style="max-width: 520px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-header-title">⚡ Switch / Test Account Tier</div>
+          <div class="modal-header-sub">Test limit enforcement and multi-scenario features across tiers</div>
+        </div>
+        <button class="btn-modal-close" onclick="closeTierUpgradeModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="background:#ffffff; display:flex; flex-direction:column; gap:12px;">
+        <div class="scenario-card-item">
+          <div>
+            <div style="font-weight:700; color:var(--text-primary);">Free Tier</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">10 simulations/day &bull; Up to 10 saved scenarios</div>
+          </div>
+          <button class="btn-auth btn-auth-secondary" onclick="switchTierTest('free')">Select Free</button>
+        </div>
+        <div class="scenario-card-item" style="border-color:#a7f3d0; background:#f0fdf4;">
+          <div>
+            <div style="font-weight:700; color:var(--positive);">Pro Tier (Journalists / Policy Analysts)</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">250 simulations/day &bull; 100 cloud saves &bull; Macro dynamic audit</div>
+          </div>
+          <button class="btn-auth btn-auth-primary" style="background:var(--positive); border-color:var(--positive);" onclick="switchTierTest('pro')">Select Pro</button>
+        </div>
+        <div class="scenario-card-item" style="border-color:#ddd6fe; background:#faf5ff;">
+          <div>
+            <div style="font-weight:700; color:#6d28d9;">Business / Enterprise Tier</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">1,000 simulations/day &bull; Unlimited saves &bull; Team sharing</div>
+          </div>
+          <button class="btn-auth btn-auth-primary" style="background:#6d28d9; border-color:#6d28d9;" onclick="switchTierTest('business')">Select Business</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal Dialog: Applied Reforms Package -->
   <div id="reforms-modal" class="modal-overlay hidden" onclick="handleModalBackdropClick(event)">
