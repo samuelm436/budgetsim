@@ -15,7 +15,7 @@ flowchart LR
     end
 
     subgraph Gateway["API Gateway (Port 3000)"]
-        GW["Node.js + Express + TypeScript<br/>• Session & Diagram Orchestrator<br/>• Package Export & Import (.json)<br/>• Upstream Timeout & Routing"]
+        GW["Node.js + Fastify + TypeScript<br/>• Session & Diagram Orchestrator<br/>• Package Export & Import (.json)<br/>• Upstream Timeout & Routing"]
     end
 
     subgraph Backend["AI & Simulation Microservice (Port 8000)"]
@@ -35,7 +35,7 @@ flowchart LR
 
 ### Components
 
-1. **`gateway_service` (Node.js + TypeScript / Express — Port 3000)**:
+1. **`gateway_service` (Node.js + TypeScript / Fastify — Port 3000)**:
    - Serves the Single Page Application (SPA).
    - Orchestrates scenario simulation requests and manages active budget states.
    - Handles Reform Package export and import (JSON format).
