@@ -1,0 +1,46 @@
+services:
+  fiscal_ai_engine:
+    build:
+      context: ./fiscal_ai_engine
+      dockerfile: Dockerfile
+    container_name: govsim_fiscal_ai_engine
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./fiscal_ai_engine:/app/fiscal_ai_engine
+    command: ["uvicorn", "fiscal_ai_engine.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - govsim_net
+
+  gateway_service:
+    build:
+      context: ./gateway_service
+      dockerfile: Dockerfile
+    container_name: govsim_gateway_service
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - FISCAL_ENGINE_URL=http://fiscal_ai_engine:8000
+      - UPSTREAM_TIMEOUT_MS=30000
+    volumes:
+      - ./gateway_service/src:/app/src
+    command: ["npm", "run", "dev"]
+    depends_on:
+      fiscal_ai_engine:
+        condition: service_healthy
+    networks:
+      - govsim_net
+
+networks:
+  govsim_net:
+    driver: bridge
