@@ -202,6 +202,22 @@ export interface SimulationResult {
     parameters: PolicyParameters;
     grounding_queries: string[];
     extracted_assumptions: string[];
+    deconstruction_ledger?: {
+      raw_measures_extracted?: Array<{
+        clause_id: number;
+        raw_text_excerpt: string;
+        policy_action: string;
+        target_budget_category: string;
+        estimated_annual_bn: number;
+        reasoning: string;
+      }>;
+      zero_double_counting_audit?: {
+        checked_for_duplicate_subsidies: boolean;
+        checked_for_phantom_revenues: boolean;
+        all_measures_distinct: boolean;
+        audit_notes: string;
+      };
+    };
   };
   initial_2027_summary: FiscalSummary;
   baseline_summary: FiscalSummary;
@@ -231,6 +247,22 @@ export interface ChatCalculationCard {
   net_budget_impact_bn: number;
   line_item_deltas: LineItemDelta[];
   apply_button: ApplyActionMetadata;
+  deconstruction_ledger?: {
+    raw_measures_extracted?: Array<{
+      clause_id: number;
+      raw_text_excerpt: string;
+      policy_action: string;
+      target_budget_category: string;
+      estimated_annual_bn: number;
+      reasoning: string;
+    }>;
+    zero_double_counting_audit?: {
+      checked_for_duplicate_subsidies: boolean;
+      checked_for_phantom_revenues: boolean;
+      all_measures_distinct: boolean;
+      audit_notes: string;
+    };
+  };
 }
 
 export interface GatewayProposalEnvelope {
@@ -657,6 +689,7 @@ async function handleProposeScenario(
     net_budget_impact_bn: simulationResult.fiscal_delta.net_budget_impact_bn,
     line_item_deltas: simulationResult.fiscal_delta.line_item_deltas,
     apply_button: simulationResult.apply_action,
+    deconstruction_ledger: simulationResult.extracted_policy?.deconstruction_ledger,
   };
 
   const envelope: GatewayProposalEnvelope & { usage?: any } = {

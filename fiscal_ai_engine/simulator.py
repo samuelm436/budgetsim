@@ -15,10 +15,13 @@ and generates a complete Before/After comparison table.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import re
 from typing import Dict, List, Optional, Tuple
 import uuid
 import numpy as np
+
+logger = logging.getLogger("fiscal_simulator")
 
 from .schemas import (
     ApplyActionMetadata,
@@ -503,9 +506,123 @@ class FiscalSimulator:
                 reformed_exp_map.get(transfer_key, 0.0) + transfer_program_cost_bn, 3
             )
 
-        # 3. Apply Generic Budget Line Modifications
+        # 3. Defensive Deduplication & Normalization of Budget Line Modifications
         formulas_applied: List[str] = []
-        for mod in params.budget_modifications:
+        has_transfer_formula = (
+            params.transfer_formula is not None
+            and params.transfer_formula.base_monthly_grant_eur > 0.0
+            and transfer_program_cost_bn > 0.0
+        )
+        transfer_slug = (
+            self._slugify_key(params.transfer_formula.program_label)
+            if has_transfer_formula and params.transfer_formula is not None
+            else ""
+        )
+        has_tax_shifts = bool(params.tax_bracket_shifts and abs(decile_tax_delta_bn) > 1e-4)
+
+        sanitized_modifications = []
+        seen_measure_fingerprints = set()
+
+        for raw_mod in params.budget_modifications:
+            mod = raw_mod.model_copy()
+            mod_slug = self._slugify_key(mod.category_key)
+            mod_disp_slug = self._slugify_key(mod.display_name or "")
+            text_desc = f"{mod.display_name} {mod.rationale} {mod.category_key}".lower()
+
+            # A. Deduplicate against transfer_formula (avoid charging transfer costs twice)
+            if has_transfer_formula and (
+                mod_slug == transfer_slug
+                or mod_disp_slug == transfer_slug
+                or ("transfer" in mod_slug and "transfer" in transfer_slug)
+                or ("dividend" in mod_slug and "dividend" in transfer_slug)
+                or ("buergergeld" in mod_slug and "buergergeld" in transfer_slug)
+            ):
+                logger.info("Deduplicating redundant BudgetLineModification for transfer formula: %s", mod.display_name)
+                continue
+
+            # B. Deduplicate against tax_bracket_shifts (avoid doubling income tax revenue impact)
+            if has_tax_shifts and mod.category_key in ("income_and_wealth_taxes", "income_taxes", "wealth_taxes"):
+                if (
+                    abs(mod.value - decile_tax_delta_bn) < 1.5
+                    or (mod.value > 0 and decile_tax_delta_bn > 0)
+                    or (mod.value < 0 and decile_tax_delta_bn < 0)
+                ):
+                    logger.info("Deduplicating redundant BudgetLineModification for income tax bracket shifts: %s", mod.display_name)
+                    continue
+
+            # C. Correct Phantom Revenues: funding cuts (subsidies, admin cuts) misclassified as public revenue
+            if mod.target_side == "revenue":
+                is_funding_cut = any(
+                    k in text_desc
+                    for k in (
+                        "cut subsidies",
+                        "subsidy cut",
+                        "subsidies cut",
+                        "curtail subsidies",
+                        "trim subsidies",
+                        "admin cut",
+                        "overhead trim",
+                        "spending cut",
+                        "subventionsabbau",
+                        "kürzung subvention",
+                        "einsparung",
+                    )
+                )
+                if is_funding_cut:
+                    logger.info("Correcting misclassified phantom revenue to expenditure cut: %s", mod.display_name)
+                    mod.target_side = "expenditure"
+                    mod.category_key = "general_financial_admin_and_other"
+                    mod.value = -abs(mod.value)
+
+            # D. Sign Normalization: Ensure cuts are negative and boosts are positive
+            if mod.operation == "DELTA_BN":
+                if mod.target_side == "expenditure":
+                    is_cut = any(
+                        k in text_desc
+                        for k in ("cut", "reduce", "reduction", "savings", "trim", "curtail", "slash", "abolish", "kürzung", "sparen", "einsparung")
+                    ) and not any(k in text_desc for k in ("prevent cut", "cancel cut", "reverse cut", "offset cut", "oppose cut"))
+                    is_increase = any(
+                        k in text_desc
+                        for k in ("increase", "boost", "expand", "funding", "invest", "raise", "ausbau", "erhöhung", "investition")
+                    ) and not any(k in text_desc for k in ("prevent increase", "cancel increase"))
+
+                    if is_cut and mod.value > 0:
+                        logger.info("Normalizing positive expenditure cut value to negative: %s (%s -> %s)", mod.display_name, mod.value, -mod.value)
+                        mod.value = -abs(mod.value)
+                    elif is_increase and mod.value < 0:
+                        logger.info("Normalizing negative expenditure increase value to positive: %s (%s -> %s)", mod.display_name, mod.value, abs(mod.value))
+                        mod.value = abs(mod.value)
+
+                elif mod.target_side == "revenue":
+                    is_relief = any(
+                        k in text_desc
+                        for k in ("cut", "relief", "reduce", "lower", "exempt", "senkung", "entlastung")
+                    ) and not any(k in text_desc for k in ("prevent relief", "cancel relief"))
+                    is_hike = any(
+                        k in text_desc
+                        for k in ("increase", "hike", "raise", "levy", "carbon tax", "surcharge", "erhöhung", "abgabe")
+                    ) and not any(k in text_desc for k in ("prevent hike", "cancel hike"))
+
+                    if is_relief and mod.value > 0:
+                        logger.info("Normalizing positive tax relief value to negative: %s (%s -> %s)", mod.display_name, mod.value, -mod.value)
+                        mod.value = -abs(mod.value)
+                    elif is_hike and mod.value < 0:
+                        logger.info("Normalizing negative tax hike value to positive: %s (%s -> %s)", mod.display_name, mod.value, abs(mod.value))
+                        mod.value = abs(mod.value)
+
+            # E. Deduplicate identical duplicate line modifications
+            target_map_check = reformed_rev_map if mod.target_side == "revenue" else reformed_exp_map
+            resolved_temp_key = self._resolve_category_key(mod.category_key, target_map_check)
+            fingerprint = f"{mod.target_side}:{resolved_temp_key}:{round(mod.value, 2)}:{mod.operation}"
+            if fingerprint in seen_measure_fingerprints:
+                logger.info("Deduplicating identical duplicate modification: %s", fingerprint)
+                continue
+            seen_measure_fingerprints.add(fingerprint)
+
+            sanitized_modifications.append(mod)
+
+        # Apply sanitized modifications
+        for mod in sanitized_modifications:
             target_map = (
                 reformed_rev_map if mod.target_side == "revenue" else reformed_exp_map
             )

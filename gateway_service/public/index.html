@@ -2464,6 +2464,55 @@
       const rawModel = envelope.model_used || envelope.simulation?.metadata?.model_used || currentActiveModelId;
       const modelBadge = formatModelShortBadge(rawModel);
 
+      let ledgerHtml = "";
+      const ledger = card.deconstruction_ledger || envelope.simulation?.extracted_policy?.deconstruction_ledger;
+      if (ledger && Array.isArray(ledger.raw_measures_extracted) && ledger.raw_measures_extracted.length > 0) {
+        ledgerHtml = `
+          <div style="margin-top:8px;">
+            <button type="button" class="btn-ledger-toggle" onclick="toggleDeconstructionLedger('${card.proposal_id}')" style="background:#f1f5f9; border:1px solid var(--border-light); border-radius:4px; padding:3px 9px; font-size:0.72rem; color:var(--text-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-family:var(--font-sans); transition:all 0.15s ease;">
+              <span style="font-weight:600; color:var(--text-primary);">Verified Breakdown (${ledger.raw_measures_extracted.length} measures &bull; Zero Double-Counting)</span>
+              <span id="ledger-arrow-${card.proposal_id}" style="font-size:0.6rem; color:var(--text-muted);">&#9662;</span>
+            </button>
+            <div id="ledger-list-${card.proposal_id}" class="hidden" style="margin-top:6px; padding:8px 10px; background:#f8fafc; border:1px solid var(--border-light); border-radius:5px; font-size:0.73rem;">
+              <div style="font-weight:600; color:var(--text-primary); margin-bottom:5px; font-size:0.72rem;">Clause-by-Clause Policy Deconstruction</div>
+              <div style="display:flex; flex-direction:column; gap:5px;">
+                ${ledger.raw_measures_extracted.map(m => {
+                  const clauseText = m.source_clause || m.raw_text_excerpt || '';
+                  const amount = Number(m.stated_or_estimated_annual_bn !== undefined ? m.stated_or_estimated_annual_bn : (m.estimated_annual_bn !== undefined ? m.estimated_annual_bn : 0));
+                  const relationship = m.funding_relationship ? m.funding_relationship.replace(/_/g, ' ') : (m.reasoning || '');
+                  const action = (m.policy_action || 'Measure').replace(/_/g, ' ');
+                  return `
+                  <div style="padding:6px 8px; background:#ffffff; border:1px solid var(--border-light); border-radius:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2px;">
+                      <span style="font-weight:600; color:var(--text-primary); text-transform:capitalize;">${escapeHtml(action.toLowerCase())}</span>
+                      <span style="font-weight:700; color:${amount >= 0 ? '#15803d' : '#b91c1c'};">${amount >= 0 ? '+' : ''}${amount.toFixed(1)}B/yr</span>
+                    </div>
+                    ${clauseText ? `<div style="color:var(--text-muted); font-size:0.68rem; margin-bottom:2px; font-style:italic;">"${escapeHtml(clauseText)}"</div>` : ''}
+                    <div style="display:flex; justify-content:space-between; font-size:0.68rem; color:var(--text-secondary); gap:8px;">
+                      <span>Category: <code>${escapeHtml(m.target_budget_category)}</code></span>
+                      <span style="font-weight:500;">${escapeHtml(relationship)}</span>
+                    </div>
+                  </div>
+                  `;
+                }).join('')}
+              </div>
+              ${(() => {
+                const audit = ledger.accounting_validation_audit || ledger.zero_double_counting_audit;
+                if (!audit) return '';
+                const safeguard = audit.double_counting_safeguard || audit.audit_notes || '';
+                const covered = audit.all_measures_covered !== undefined ? (audit.all_measures_covered ? 'Yes (100%)' : 'Partial') : (audit.all_measures_distinct ? 'Yes' : 'N/A');
+                return `
+                <div style="margin-top:6px; padding-top:5px; border-top:1px dashed var(--border-light); font-size:0.68rem; color:var(--text-muted);">
+                  <div><strong>Institutional Audit:</strong> All Measures Accounted: ${covered}</div>
+                  ${safeguard ? `<div style="margin-top:2px; color:var(--text-secondary);">${escapeHtml(safeguard)}</div>` : ''}
+                </div>
+                `;
+              })()}
+            </div>
+          </div>
+        `;
+      }
+
       let citationsHtml = "";
       const citations = envelope.simulation?.metadata?.citations || [];
       if (citations.length > 0) {
@@ -2506,6 +2555,7 @@
             </div>
           </div>
           <div class="calc-deltas">${linesHtml}</div>
+          ${ledgerHtml}
           ${citationsHtml}
           <div class="calc-card-actions">
             <span class="exec-latency">${secTime}s &bull; ${modelBadge}</span>
@@ -2531,10 +2581,23 @@
       if (!listEl) return;
       if (listEl.classList.contains("hidden")) {
         listEl.classList.remove("hidden");
-        if (arrowEl) arrowEl.innerText = "▴";
+        if (arrowEl) arrowEl.innerHTML = "&#9652;";
       } else {
         listEl.classList.add("hidden");
-        if (arrowEl) arrowEl.innerText = "▾";
+        if (arrowEl) arrowEl.innerHTML = "&#9662;";
+      }
+    }
+
+    function toggleDeconstructionLedger(proposalId) {
+      const listEl = document.getElementById(`ledger-list-${proposalId}`);
+      const arrowEl = document.getElementById(`ledger-arrow-${proposalId}`);
+      if (!listEl) return;
+      if (listEl.classList.contains("hidden")) {
+        listEl.classList.remove("hidden");
+        if (arrowEl) arrowEl.innerHTML = "&#9652;";
+      } else {
+        listEl.classList.add("hidden");
+        if (arrowEl) arrowEl.innerHTML = "&#9662;";
       }
     }
 

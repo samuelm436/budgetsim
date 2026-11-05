@@ -48,27 +48,63 @@ logging.basicConfig(
 SYSTEM_EXTRACTION_INSTRUCTION = """You are the Chief Fiscal Economist AI for GovSim AI.
 Speed & Precision Directive: Be decisive, mathematically exact, and institutional. All outputs must be in crisp English.
 
-Baseline: German Federal Budget 2027 Draft (Regierungsentwurf, €555.4B Exp / €436.7B Rev / €118.7B Deficit / 68.8M adults).
+Baseline Reference: German Federal Budget 2027 Draft (Regierungsentwurf 2027, BT-Drs. 21/7300):
+- Total Core Expenditures: €555.4B | Total Non-Credit Revenues: €436.7B | Net Borrowing (Deficit): €118.7B | 68.8M adults.
 
-Revenue Categories:
-- `income_and_wealth_taxes` (€162.4B) | `value_added_and_consumption_taxes` (€146.8B) | `corporate_and_business_taxes` (€44.2B) | `energy_and_environmental_taxes` (€45.2B) | `non_tax_and_other_revenues` (€38.1B)
+Revenue Categories (Federal Share):
+- `income_and_wealth_taxes` (€162.4B) — Wage Tax, Assessed Income Tax, Solidarity Surcharge, Capital Withholding Tax
+- `value_added_and_consumption_taxes` (€146.8B) — Federal share of VAT (Umsatzsteuer) & Import VAT
+- `corporate_and_business_taxes` (€44.2B) — Corporate Tax (Körperschaftsteuer) & Trade Tax federal share
+- `energy_and_environmental_taxes` (€45.2B) — Energy Tax, Electricity Tax, Aviation, Tobacco & Insurance Taxes
+- `non_tax_and_other_revenues` (€38.1B) — Bundesbank profit, CO2/Tolls, administrative fees & EU inflows
 
 Expenditure Categories (2027 Einzelpläne):
-- `labor_and_social_affairs_ep11` (€201.5B) | `defense_and_security_ep14` (€109.7B) | `federal_debt_interest_ep32` (€43.6B) | `transport_and_digital_ep12` (€26.4B) | `research_tech_and_aerospace_ep30` (€22.0B) | `family_education_and_youth_ep17` (€15.5B) | `economic_affairs_energy_climate_ep09_16` (€8.3B) | `general_financial_admin_and_other` (€128.4B)
+- `labor_and_social_affairs_ep11` (€201.5B) — BMAS: Statutory Pensions (~€133B), Citizen's Benefit (Bürgergeld), Basic Security
+- `defense_and_security_ep14` (€109.7B) — BMVg: Federal Armed Forces (Bundeswehr), Military Procurement & NATO capabilities
+- `federal_debt_interest_ep32` (€43.6B) — Bundesschuld: Federal Debt Service & Interest
+- `transport_and_digital_ep12` (€26.4B) — BMV: Rail Infrastructure, Roads, Waterways & Digital Connectivity
+- `research_tech_and_aerospace_ep30` (€22.0B) — BMFTR: Science, Universities, AI, Innovation, Space & Future Technologies
+- `family_education_and_youth_ep17` (€15.5B) — BMBFSFJ: Child Benefits, Parental Allowance (Elterngeld), Youth & Education
+- `economic_affairs_energy_climate_ep09_16` (€8.3B) — BMWE & BMUKN: Economic Transformation, Energy Grids & Climate Actions
+- `general_financial_admin_and_other` (€128.4B) — EP 60, 06, 08, 15, 23: General Financial Administration, Health, Interior, Development Aid (BMZ €9.5B), Subsidies & Reserves
 
-COMPREHENSIVE MULTI-MEASURE EXTRACTION MANDATE:
-- When provided with an extensive reform package, multi-part legislative proposal, omnibus bill, or uploaded document:
-  You MUST thoroughly extract and model EVERY SINGLE policy measure, tax adjustment, expenditure alteration, and subsidy change present in the input.
-  DO NOT sample, summarize, or partially pick only 1 or 2 parts of the package.
-  Every distinct fiscal measure with an impact MUST have its own dedicated item in `budget_modifications`. If there are 5, 10, or 20 distinct measures, all of them must be individually included.
+================================================================================
+CRITICAL DIRECTIVE 1: ZERO DOUBLE-COUNTING & NO PHANTOM FINANCING
+================================================================================
+1. FINANCING CUTS ARE EXPENDITURE REDUCTIONS, NEVER REVENUES:
+   When a proposal states: "Increase spending on X by €A, funded by cutting €B from Y":
+   - Measure 1 (Expenditure Increase): target_side: "expenditure", category_key: "X", operation: "DELTA_BN", value: +A
+   - Measure 2 (Expenditure Cut): target_side: "expenditure", category_key: "Y", operation: "DELTA_BN", value: -B (MUST be negative!)
+   - STRICT PROHIBITION: NEVER enter a spending cut or subsidy reduction as a revenue increase (`target_side: "revenue"`).
+     Cutting an expenditure decreases public spending; it does NOT generate new tax or toll revenue.
+     Entering a spending cut on the revenue side creates fictitious phantom revenue and falsely doubles the net deficit reduction!
 
-Extraction Rules:
-1. `chat_feedback`: 1-2 concise, executive sentences summarizing the full package and the net borrowing impact.
-2. `policy_name`: Institutional title under 6 words describing the complete reform package.
-3. `budget_modifications`: Output an entry for EVERY modified line item using:
-   - `DELTA_BN` (+/- EUR billions), `DELTA_PCT` (decimal percent, e.g. -0.05), `SET_ABSOLUTE_BN`, `ABOLISH` (value in savings), or `NEW_LINE_BN`.
-4. `rationale` & `extracted_assumptions`: 1 short sentence each.
-5. If decile tax rates shift (1-10), populate `parameters.tax_bracket_shifts`. If per-capita transfer/dividend, populate `parameters.transfer_formula`.
+2. TAX CUTS / RELIEF ARE REVENUE REDUCTIONS, NEVER EXPENDITURES:
+   When a proposal reduces taxes or offers tax relief:
+   - target_side: "revenue", operation: "DELTA_BN", value: -X (MUST be a negative number).
+   - NEVER model tax relief as a public expenditure.
+
+3. DEDUPLICATION ACROSS PRIMITIVES:
+   - If using `parameters.transfer_formula` for a household dividend (e.g. climate dividend, universal payout), DO NOT ALSO add a `BudgetLineModification` for the transfer cost. The simulation engine automatically evaluates the formula.
+   - If using `parameters.tax_bracket_shifts` for decile tax rates, DO NOT ALSO add a `BudgetLineModification` for `income_and_wealth_taxes`.
+
+4. STRICT SIGN CONVENTIONS:
+   - `DELTA_BN`: Positive (`+10.0`) for spending increases / tax hikes. Negative (`-10.0`) for spending cuts / tax relief.
+   - `DELTA_PCT`: Decimal fraction (e.g., `-0.10` for -10% cut, `+0.05` for +5% increase).
+   - `NEW_LINE_BN`: Positive number for creating an entirely new distinct budget program.
+
+================================================================================
+CRITICAL DIRECTIVE 2: EXHAUSTIVE EXTRACTION (NO NEGLECTED PARTS)
+================================================================================
+1. In `deconstruction_ledger.raw_measures_extracted`:
+   You MUST enumerate EVERY single policy measure, spending allocation, tax modification, subsidy reduction, and structural reform present in the user prompt or uploaded document.
+   Do NOT sample, do NOT pick favorites, and do NOT truncate.
+2. In `deconstruction_ledger.accounting_validation_audit`:
+   Audit each measure to verify:
+   a) Every measure in `raw_measures_extracted` maps to exactly one modification entry.
+   b) No funding cuts are entered as revenues.
+   c) All measures from the input are covered (`all_measures_covered: true`).
+3. Only after completing the deconstruction ledger, populate `parameters.budget_modifications`.
 Respond strictly in valid JSON complying with the schema."""
 
 
@@ -139,24 +175,75 @@ class UnifiedPolicyExtractor:
                 os.environ["OPENAI_API_KEY"] = api_key
         os.environ["ACTIVE_MODEL"] = model_name
 
+    def _build_user_turn_prompt(
+        self,
+        raw_prompt: str,
+        current_baseline: Optional[FiscalSummary] = None,
+    ) -> str:
+        cur_exp = current_baseline.total_expenditure_bn if current_baseline else 555.4
+        cur_rev = current_baseline.total_revenue_bn if current_baseline else 436.7
+        cur_bor = current_baseline.net_borrowing_requirement_bn if current_baseline else 118.7
+
+        rev_lines = ""
+        exp_lines = ""
+        if current_baseline:
+            rev_lines = "\n".join(
+                f"  - `{k}`: €{v:.1f}B" for k, v in current_baseline.revenue_breakdown_bn.items()
+            )
+            exp_lines = "\n".join(
+                f"  - `{k}`: €{v:.1f}B" for k, v in current_baseline.expenditure_breakdown_bn.items()
+            )
+
+        context_str = f"""CURRENT ACTIVE BUDGET STATE (Prior to Applying This Proposal):
+- Total Core Expenditures: €{cur_exp:.1f}B
+- Total Non-Credit Revenues: €{cur_rev:.1f}B
+- Net Borrowing Requirement (Deficit): €{cur_bor:.1f}B"""
+        if rev_lines and exp_lines:
+            context_str += f"""\nActive Revenues:\n{rev_lines}\nActive Expenditures:\n{exp_lines}"""
+
+        return f"""Analyze and model the following policy proposal against the German Federal Budget.
+
+{context_str}
+
+USER POLICY PROPOSAL / LEGISLATIVE REFORM PACKAGE:
+\"\"\"
+{raw_prompt}
+\"\"\"
+
+EXECUTION DIRECTIVES:
+1. Enumerate EVERY distinct clause and measure into `deconstruction_ledger.raw_measures_extracted`. Do not omit any part.
+2. Certify in `deconstruction_ledger.accounting_validation_audit` that spending cuts are NOT modeled as revenues (preventing double counting) and all measures are covered.
+3. Map each measure cleanly to `parameters.budget_modifications` using exact canonical category keys and correct +/- signs."""
+
     def extract_policy(
         self,
         raw_prompt: str,
         enable_search_grounding: bool = False,
         reasoning_effort: str = "low",
+        current_baseline: Optional[FiscalSummary] = None,
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
         """Extract structured policy parameters via the active LLM provider."""
         provider = self.get_provider()
         if provider == "google":
-            return self._extract_via_gemini(raw_prompt, enable_search_grounding)
+            return self._extract_via_gemini(
+                raw_prompt,
+                enable_search_grounding,
+                current_baseline=current_baseline,
+            )
         else:
-            return self._extract_via_openai(raw_prompt, enable_search_grounding, reasoning_effort)
+            return self._extract_via_openai(
+                raw_prompt,
+                enable_search_grounding,
+                reasoning_effort,
+                current_baseline=current_baseline,
+            )
 
     def _extract_via_openai(
         self,
         raw_prompt: str,
         enable_search_grounding: bool = False,
         reasoning_effort: str = "low",
+        current_baseline: Optional[FiscalSummary] = None,
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
         """Extract policy using OpenAI model (e.g. GPT-6-Luna). Supports live OpenAI web search."""
         import json
@@ -171,6 +258,7 @@ class UnifiedPolicyExtractor:
 
         client = OpenAI(api_key=api_key, base_url=self.openai_base_url)
         effort = reasoning_effort if reasoning_effort in ("low", "medium", "high") else "low"
+        user_prompt = self._build_user_turn_prompt(raw_prompt, current_baseline)
 
         # 1. Live Web Search via OpenAI Responses API (web_search)
         if enable_search_grounding:
@@ -178,7 +266,7 @@ class UnifiedPolicyExtractor:
                 schema_json = json.dumps(PolicyExtractionSchema.model_json_schema())
                 resp = client.responses.create(
                     model=self.model_name,
-                    input=raw_prompt,
+                    input=user_prompt,
                     instructions=(
                         SYSTEM_EXTRACTION_INSTRUCTION
                         + f"\n\nCRITICAL: Respond ONLY with a valid JSON object complying exactly with this schema:\n{schema_json}"
@@ -235,7 +323,7 @@ class UnifiedPolicyExtractor:
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": SYSTEM_EXTRACTION_INSTRUCTION},
-                    {"role": "user", "content": raw_prompt},
+                    {"role": "user", "content": user_prompt},
                 ],
                 response_format=PolicyExtractionSchema,
                 **call_kwargs,
@@ -253,7 +341,7 @@ class UnifiedPolicyExtractor:
                         model=self.model_name,
                         messages=[
                             {"role": "system", "content": SYSTEM_EXTRACTION_INSTRUCTION},
-                            {"role": "user", "content": raw_prompt},
+                            {"role": "user", "content": user_prompt},
                         ],
                         response_format=PolicyExtractionSchema,
                     )
@@ -273,7 +361,7 @@ class UnifiedPolicyExtractor:
                         "content": SYSTEM_EXTRACTION_INSTRUCTION
                         + "\n\nCRITICAL: Respond ONLY with a valid JSON object matching the PolicyExtractionSchema schema.",
                     },
-                    {"role": "user", "content": raw_prompt},
+                    {"role": "user", "content": user_prompt},
                 ],
                 response_format={"type": "json_object"},
                 **fallback_kwargs,
@@ -283,7 +371,10 @@ class UnifiedPolicyExtractor:
             return parsed, f"OPENAI_JSON_{self.model_name.upper()}", []
 
     def _extract_via_gemini(
-        self, raw_prompt: str, enable_search_grounding: bool
+        self,
+        raw_prompt: str,
+        enable_search_grounding: bool,
+        current_baseline: Optional[FiscalSummary] = None,
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
         """Invoke google-genai SDK with structured output schema and low-latency thinking config."""
         from google import genai
@@ -295,6 +386,7 @@ class UnifiedPolicyExtractor:
 
         client = genai.Client(api_key=api_key)
         tools = [types.Tool(google_search=types.GoogleSearch())] if enable_search_grounding else None
+        user_prompt = self._build_user_turn_prompt(raw_prompt, current_baseline)
 
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_EXTRACTION_INSTRUCTION,
@@ -307,7 +399,7 @@ class UnifiedPolicyExtractor:
 
         response = client.models.generate_content(
             model=self.model_name,
-            contents=raw_prompt,
+            contents=user_prompt,
             config=config,
         )
 
@@ -731,6 +823,7 @@ async def simulate_policy(
             raw_prompt=request.raw_prompt,
             enable_search_grounding=request.enable_search_grounding,
             reasoning_effort=request.reasoning_effort or "low",
+            current_baseline=request.current_baseline_override,
         )
 
         if request.override_parameters is not None:

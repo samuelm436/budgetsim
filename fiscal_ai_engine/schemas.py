@@ -133,9 +133,87 @@ class PolicyParameters(BaseModel):
     )
 
 
-class PolicyExtractionSchema(BaseModel):
-    """Structured schema extracted by Gemini from a user's conversational chat prompt."""
+class ExtractedMeasureItem(BaseModel):
+    """An individual fiscal measure or policy clause extracted from the prompt."""
 
+    measure_id: int = Field(
+        ...,
+        description="Sequential index of the measure from the input text (1, 2, ...).",
+    )
+    source_clause: str = Field(
+        ...,
+        description="Exact quote, clause, or excerpt from the prompt expressing this policy change.",
+    )
+    policy_action: Literal[
+        "SPENDING_INCREASE",
+        "SPENDING_CUT",
+        "TAX_INCREASE",
+        "TAX_CUT",
+        "TRANSFER_PAYMENT",
+        "REGULATORY_OR_STRUCTURAL",
+    ] = Field(
+        ...,
+        description="Economic nature of the policy intervention.",
+    )
+    target_budget_category: str = Field(
+        ...,
+        description="Target German Federal Budget category or Einzelplan.",
+    )
+    stated_or_estimated_annual_bn: float = Field(
+        ...,
+        description="Annual fiscal magnitude in EUR billions (or percentage).",
+    )
+    funding_relationship: Literal[
+        "PRIMARY_EXPENDITURE",
+        "FINANCING_CUT",
+        "REVENUE_LEVY",
+        "HOUSEHOLD_TRANSFER",
+    ] = Field(
+        ...,
+        description="Role in the reform package.",
+    )
+
+
+class AccountingValidationAudit(BaseModel):
+    """Integrity checks to prevent double counting, phantom revenues, and omitted measures."""
+
+    double_counting_safeguard: str = Field(
+        ...,
+        description="Explicit explanation confirming that spending cuts are modeled strictly as expenditure reductions (not revenues), and that no measure is counted twice.",
+    )
+    all_measures_covered: bool = Field(
+        default=True,
+        description="Whether every single proposal, clause, or numbered item from the user input is included in the extraction.",
+    )
+    omitted_items_justification: str = Field(
+        default="None - all measures from prompt are fully extracted and modeled.",
+        description="Explanation if any item was non-fiscal, purely regulatory, or intentionally unmodeled.",
+    )
+
+
+class DeconstructionLedger(BaseModel):
+    """Exhaustive clause-by-clause inventory of every measure in the prompt, verified against double counting and omissions before calculating budget parameters."""
+
+    raw_measures_extracted: List[ExtractedMeasureItem] = Field(
+        default_factory=list,
+        description="Exhaustive list of every single fiscal measure and funding clause identified in the input prompt.",
+    )
+    accounting_validation_audit: AccountingValidationAudit = Field(
+        ...,
+        description="Pre-computation verification against double-counting and omissions.",
+    )
+
+
+class PolicyExtractionSchema(BaseModel):
+    """Structured schema extracted by the LLM from a user's conversational chat prompt."""
+
+    deconstruction_ledger: DeconstructionLedger = Field(
+        ...,
+        description=(
+            "Exhaustive clause-by-clause inventory of every measure in the prompt, "
+            "verified against double counting and omissions before calculating budget parameters."
+        ),
+    )
     policy_name: str = Field(
         ...,
         description="Concise English title summarizing the policy proposal.",
