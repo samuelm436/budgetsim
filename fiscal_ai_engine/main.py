@@ -10,14 +10,18 @@ Microservice 1: Fiscal AI & Deterministic Microsimulation Engine
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
+import io
 import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
+import docx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+import pypdf
 from pydantic import BaseModel
 
 from .schemas import (
@@ -538,6 +542,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class DocumentExtractRequest(BaseModel):
+    filename: str
+    content_base64: str
+
+
+def extract_text_from_document(filename: str, content_bytes: bytes) -> str:
+    """Extract readable text from PDF, DOCX, DOC, or TXT."""
+    name_lower = (filename or "").lower()
+    if name_lower.endswith(".pdf"):
+        reader = pypdf.PdfReader(io.BytesIO(content_bytes))
+        pages_text: List[str] = []
+        for page in reader.pages:
+            t = page.extract_text()
+            if t:
+                pages_text.append(t)
+        return "\n\n".join(pages_text)
+    elif name_lower.endswith(".docx") or name_lower.endswith(".doc"):
+        doc = docx.Document(io.BytesIO(content_bytes))
+        paragraphs: List[str] = [p.text for p in doc.paragraphs if p.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                if row_text:
+                    paragraphs.append(row_text)
+        return "\n\n".join(paragraphs)
+    else:
+        try:
+            return content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return content_bytes.decode("latin-1", errors="replace")
+
+
+@app.post("/api/v1/extract-document", tags=["Document"])
+async def extract_document_endpoint(req: DocumentExtractRequest) -> Dict[str, Any]:
+    """Extract plain text from an uploaded PDF, DOCX, or TXT file."""
+    try:
+        content_bytes = base64.b64decode(req.content_base64)
+        extracted = extract_text_from_document(req.filename, content_bytes)
+        clean = extracted.strip()
+        if not clean:
+            raise ValueError("No readable text found in uploaded document.")
+        return {
+            "status": "SUCCESS",
+            "filename": req.filename,
+            "text": clean,
+            "char_count": len(clean),
+        }
+    except Exception as exc:
+        logger.warning("Document extraction failed for '%s': %s", req.filename, exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to extract document: {exc}",
+        ) from exc
 
 
 class ModelConfigRequest(BaseModel):

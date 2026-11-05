@@ -345,6 +345,31 @@
     .btn-submit:hover:not(:disabled) { background: #1e293b; }
     .btn-submit:disabled { opacity: 0.6; cursor: wait; }
 
+    .btn-composer-upload {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-subtle);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      padding: 0 11px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .btn-composer-upload:hover:not(:disabled) {
+      background: #e2e8f0;
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    .btn-composer-upload:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     /* Right Panel: Fiscal Analytics, Dual Vertical Bars & Before/After Table */
     .analytics-panel {
       flex: 1;
@@ -1428,10 +1453,28 @@
         </div>
         <form class="composer-form" onsubmit="handleChatSubmit(event)">
           <input
+            type="file"
+            id="package-file-input"
+            accept=".pdf,.txt,.docx,.doc"
+            style="display:none;"
+            onchange="handlePackageFileUpload(event)"
+          />
+          <button
+            type="button"
+            class="btn-composer-upload"
+            id="btn-upload-package"
+            onclick="triggerPackageFileInput()"
+            title="Upload Reform Package (PDF, TXT, DOCX) - Business & Admin"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+          <input
             type="text"
             id="chat-input"
             class="composer-input"
-            placeholder="Propose a policy or budget modification..."
+            placeholder="Propose a policy or upload a reform package..."
             autocomplete="off"
           />
           <button type="submit" id="btn-send" class="btn-submit">Calculate</button>
@@ -1533,11 +1576,11 @@
                   <span style="font-size:0.58rem; background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe; padding:1px 4px; border-radius:3px; font-weight:700;">STAFF</span>
                 </div>
                 <button class="popover-item" onclick="closeAccountMenu(); openModelSwitcherModal();" title="Configure AI engine model">
-                  <span>🤖 AI Model</span>
+                  <span>AI Model</span>
                   <span id="popover-active-model-label" style="font-size:0.72rem; color:var(--accent); font-family:var(--font-mono); font-weight:700;">GPT-6-Luna &rsaquo;</span>
                 </button>
                 <button class="popover-item" onclick="closeAccountMenu(); openTierUpgradeModal();" title="Test different user tiers">
-                  <span>⚡ Testing: Switch Tier</span>
+                  <span>Testing: Switch Tier</span>
                   <span id="popover-switch-tier-label" style="font-size:0.7rem; color:var(--text-muted);">Business &rsaquo;</span>
                 </button>
               </div>
@@ -1887,7 +1930,7 @@
         if (!res.ok) {
           if (res.status === 429 || data?.error?.code === "TIER_LIMIT_REACHED") {
             showLimitExceededModal(data.error);
-            appendErrorBubble(`⚠️ Limit Reached: ${data.error.message}`);
+            appendErrorBubble(`Limit Reached: ${data.error.message}`);
             return;
           }
           const errDetail = data?.error?.details?.detail || data?.error?.message || `HTTP ${res.status}`;
@@ -1908,6 +1951,117 @@
       } finally {
         sendBtn.disabled = false;
         sendBtn.innerText = "Calculate";
+      }
+    }
+
+    function triggerPackageFileInput() {
+      if (!currentAuthUser) {
+        openAuthModal("login");
+        return;
+      }
+      const tier = (currentAuthUser.tier || "free").toLowerCase();
+      const role = (currentAuthUser.role || "user").toLowerCase();
+      if (tier !== "business" && role !== "admin") {
+        const modal = document.getElementById("limit-modal");
+        const titleEl = document.getElementById("limit-modal-title");
+        const descEl = document.getElementById("limit-modal-desc");
+        const actionBtn = document.getElementById("btn-limit-action");
+        titleEl.innerText = "Business Tier Required";
+        descEl.innerText = "Uploading comprehensive reform packages (PDF, TXT, DOCX) is exclusively available for Business tier and Administrator accounts. Please upgrade to incorporate multi-page legislative proposals.";
+        actionBtn.innerText = "Upgrade to Business Tier";
+        actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
+        modal.classList.remove("hidden");
+        return;
+      }
+      const fileInput = document.getElementById("package-file-input");
+      if (fileInput) fileInput.click();
+    }
+
+    async function handlePackageFileUpload(event) {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+
+      const allowedExtensions = [".pdf", ".txt", ".docx", ".doc"];
+      const lowerName = file.name.toLowerCase();
+      const isValid = allowedExtensions.some(ext => lowerName.endsWith(ext));
+      if (!isValid) {
+        alert("Unsupported file format. Please upload a PDF, TXT, or DOCX document.");
+        event.target.value = "";
+        return;
+      }
+
+      if (file.size > 25 * 1024 * 1024) {
+        alert("File size exceeds 25 MB limit.");
+        event.target.value = "";
+        return;
+      }
+
+      appendUserBubble(`Uploaded Package: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+
+      const sendBtn = document.getElementById("btn-send");
+      const uploadBtn = document.getElementById("btn-upload-package");
+      if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerText = "Simulating...";
+      }
+      if (uploadBtn) uploadBtn.disabled = true;
+
+      const enableGrounding = document.getElementById("chk-grounding").checked;
+      const headers = { "Content-Type": "application/json" };
+      const token = localStorage.getItem("govsim_auth_token");
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      try {
+        const base64Content = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const res = reader.result;
+            const base64 = typeof res === "string" ? res.split(",")[1] || res : "";
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const res = await fetch("/api/chat/upload-package", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            filename: file.name,
+            content_base64: base64Content,
+            build_on_active_diagram: true,
+            enable_search_grounding: enableGrounding
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 429 || data?.error?.code === "TIER_LIMIT_REACHED") {
+            showLimitExceededModal(data.error);
+            appendErrorBubble(`Limit Reached: ${data.error.message}`);
+            return;
+          }
+          const errDetail = data?.error?.details?.detail || data?.error?.message || `HTTP ${res.status}`;
+          appendErrorBubble(errDetail);
+          return;
+        }
+
+        if (data.usage) {
+          updateUsageDisplay(data.usage);
+        } else {
+          refreshAuthMe();
+        }
+
+        appendProposalBubble(data);
+      } catch (err) {
+        appendErrorBubble(`Connection error: ${err.message}`);
+      } finally {
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.innerText = "Calculate";
+        }
+        if (uploadBtn) uploadBtn.disabled = false;
+        event.target.value = "";
       }
     }
 
@@ -1972,7 +2126,7 @@
         citationsHtml = `
           <div style="margin-top:8px;">
             <button type="button" class="btn-sources-toggle" onclick="toggleSourcesList('${card.proposal_id}')" style="background:#f8fafc; border:1px solid var(--border-light); border-radius:4px; padding:3px 9px; font-size:0.72rem; color:var(--text-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-family:var(--font-sans); transition:all 0.15s ease;">
-              <span>🌐 Sources (${citations.length})</span>
+              <span>Sources (${citations.length})</span>
               <span id="sources-arrow-${card.proposal_id}" style="font-size:0.6rem; color:var(--text-muted);">▾</span>
             </button>
             <div id="sources-list-${card.proposal_id}" class="hidden" style="margin-top:6px; padding:8px 10px; background:#f8fafc; border:1px solid var(--border-light); border-radius:5px; font-size:0.73rem;">
@@ -2008,7 +2162,7 @@
           <div class="calc-deltas">${linesHtml}</div>
           ${citationsHtml}
           <div class="calc-card-actions">
-            <span class="exec-latency">${secTime}s &bull; ${modelBadge}${hasWebSearch ? ' &bull; 🌐 Web Search' : ''}</span>
+            <span class="exec-latency">${secTime}s &bull; ${modelBadge}</span>
             <button class="btn-apply" id="btn-apply-${card.proposal_id}" onclick="applyProposalToBudget('${card.proposal_id}')">
               Apply to Budget &rarr;
             </button>
@@ -2054,7 +2208,7 @@
           );
           if (btn) {
             btn.className = "btn-apply applied";
-            btn.innerText = "✓ Applied to 2027 Budget";
+            btn.innerText = "Applied to 2027 Budget";
           }
         }
       } catch (err) {
@@ -2210,7 +2364,7 @@
       const btn = document.getElementById("btn-modal-assess");
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<span>⚖️ Assessing Macro Dynamics...</span>`;
+        btn.innerHTML = `<span>Assessing Macro Dynamics...</span>`;
       }
 
       try {
@@ -2234,7 +2388,7 @@
       } finally {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = `<span>⚖️ Critically Assess Package</span>`;
+          btn.innerHTML = `<span>Critically Assess Package</span>`;
         }
       }
     }
@@ -2282,7 +2436,7 @@
         <div class="macro-assessment-card" id="active-macro-card" style="margin-bottom: 18px;">
           <div class="macro-card-header">
             <div class="macro-title">
-              <span>⚖️ ${assessment.assessment_title}</span>
+              <span>${assessment.assessment_title}</span>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
               <span class="macro-gdp-badge">Real GDP: ${gdpSign}${assessment.dynamic_gdp_growth_impact_pct.toFixed(2)}%</span>
@@ -2323,7 +2477,7 @@
               Static Borrowing: <strong>€${assessment.static_net_borrowing_bn.toFixed(1)}B</strong> &rarr; Dynamically Calibrated Borrowing: <strong>€${assessment.corrected_net_borrowing_bn.toFixed(1)}B</strong>
             </div>
             <button class="btn-apply-corrections" id="btn-apply-corrections" onclick="applyMacroCorrections()">
-              ✓ Apply Macro Corrections to Budget
+              Apply Macro Corrections to Budget
             </button>
           </div>
         </div>
@@ -2371,7 +2525,7 @@
           btn.style.background = "var(--positive-bg)";
           btn.style.color = "var(--positive)";
           btn.style.borderColor = "#a7f3d0";
-          btn.innerText = "✓ Dynamic Corrections Applied to 2027 Budget";
+          btn.innerText = "Dynamic Corrections Applied to 2027 Budget";
         }
       } catch (err) {
         console.error("Failed to apply corrections:", err);
@@ -2845,7 +2999,7 @@
         document.getElementById("active-scenario-tag").title = `Saved Scenario: ${data.scenario.title}`;
         closeSaveScenarioModal();
         await refreshScenariosCount();
-        alert(`✓ Scenario '${data.scenario.title}' saved to your cloud database!`);
+        alert(`Scenario '${data.scenario.title}' saved to your cloud database.`);
       } catch (err) {
         alert(`Network error saving scenario: ${err.message}`);
       } finally {
@@ -2876,7 +3030,7 @@
           listContainer.innerHTML = `
             <div class="modal-empty-state">
               <h4>No Saved Scenarios Yet</h4>
-              <p>You haven't saved any fiscal scenarios yet. Apply reforms on the left, then click <strong>💾 Save Scenario</strong>.</p>
+              <p>You haven't saved any fiscal scenarios yet. Apply reforms on the left, then click <strong>Save Scenario</strong>.</p>
               <button class="btn-auth btn-auth-primary" onclick="closeMyScenariosModal(); openSaveScenarioModal();">Save Current State as Scenario</button>
             </div>
           `;
@@ -2975,7 +3129,7 @@
           body: JSON.stringify({ overwrite_with_active: true })
         });
         if (res.ok) {
-          alert("✓ Scenario updated with current active budget!");
+          alert("Scenario updated with current active budget.");
           openMyScenariosModal();
         }
       } catch (err) {
@@ -3063,7 +3217,7 @@
         }
         closeTierUpgradeModal();
         await refreshAuthMe();
-        alert(`✓ Account switched to ${data.user.tier.toUpperCase()} tier!`);
+        alert(`Account switched to ${data.user.tier.toUpperCase()} tier.`);
       } catch (err) {
         alert(`Failed to switch tier: ${err.message}`);
       }
@@ -3170,7 +3324,7 @@
           return;
         }
 
-        msgEl.innerText = `✓ Active model successfully switched to ${formatModelShortBadge(currentActiveModelId)}!`;
+        msgEl.innerText = `Active model successfully switched to ${formatModelShortBadge(currentActiveModelId)}.`;
         msgEl.style.color = "var(--positive)";
         await refreshAuthMe();
 
@@ -3250,14 +3404,14 @@
         <!-- Quick 1-Click Test Demo Logins (Restricted to Administrator) -->
         <div id="auth-demo-logins-section" style="display:none; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border-light);">
           <div style="font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">
-            ⚡ Quick 1-Click Demo Logins (Admin Testing Only)
+            Quick 1-Click Demo Logins (Admin Testing Only)
           </div>
           <div style="display:flex; gap:8px;">
             <button class="btn-auth btn-auth-secondary" style="flex:1; justify-content:center;" onclick="handleQuickLogin('free')">
               Free Tier (10/Day)
             </button>
             <button class="btn-auth btn-auth-secondary" style="flex:1; justify-content:center; color:var(--positive); border-color:#a7f3d0;" onclick="handleQuickLogin('pro')">
-              ⭐ Pro Tier (Unlimited)
+              Pro Tier (Unlimited)
             </button>
           </div>
         </div>
@@ -3270,7 +3424,7 @@
     <div class="modal-window" style="max-width: 500px;">
       <div class="modal-header">
         <div>
-          <div class="modal-header-title">💾 Save Scenario to Cloud Database</div>
+          <div class="modal-header-title">Save Scenario to Cloud Database</div>
           <div class="modal-header-sub">Saves your active reform package and budget state to your account</div>
         </div>
         <button class="btn-modal-close" onclick="closeSaveScenarioModal()">&times;</button>
@@ -3301,7 +3455,7 @@
     <div class="modal-window" style="max-width: 680px;">
       <div class="modal-header">
         <div>
-          <div class="modal-header-title">📂 My Saved Fiscal Scenarios</div>
+          <div class="modal-header-title">My Saved Fiscal Scenarios</div>
           <div class="modal-header-sub">Load, update, or compare your saved reform packages in SQLite</div>
         </div>
         <button class="btn-modal-close" onclick="closeMyScenariosModal()">&times;</button>
@@ -3323,7 +3477,7 @@
     <div class="modal-window" style="max-width: 480px;">
       <div class="modal-header" style="background:#fffbeb; border-bottom-color:#fde68a;">
         <div>
-          <div class="modal-header-title" id="limit-modal-title" style="color:#92400e;">⚠️ Simulation Limit Reached</div>
+          <div class="modal-header-title" id="limit-modal-title" style="color:#92400e;">Simulation Limit Reached</div>
           <div class="modal-header-sub" style="color:#b45309;">GovSim AI Tier Quota</div>
         </div>
         <button class="btn-modal-close" onclick="closeLimitModal()">&times;</button>
@@ -3347,7 +3501,7 @@
     <div class="modal-window" style="max-width: 520px;">
       <div class="modal-header">
         <div>
-          <div class="modal-header-title">⚡ Switch / Test Account Tier</div>
+          <div class="modal-header-title">Switch / Test Account Tier</div>
           <div class="modal-header-sub">Test limit enforcement and multi-scenario features across tiers</div>
         </div>
         <button class="btn-modal-close" onclick="closeTierUpgradeModal()">&times;</button>
@@ -3409,7 +3563,7 @@
             onclick="runMacroAssessment()"
             title="Critically assess reform package to correct numbers and factor in economic changes"
           >
-            <span>⚖️ Critically Assess Package</span>
+            <span>Critically Assess Package</span>
           </button>
           <button class="btn-tool" onclick="exportReformPackage()">Export JSON</button>
           <button class="btn-tool" onclick="triggerImportFileInput()">Import JSON</button>
@@ -3424,7 +3578,7 @@
       <div class="modal-header">
         <div>
           <div class="modal-header-title" style="display:flex; align-items:center; gap:8px;">
-            <span>🤖 AI Policy Engine Model</span>
+            <span>AI Policy Engine Model</span>
             <span style="font-size:0.65rem; background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe; padding:2px 6px; border-radius:4px; font-weight:700;">ADMIN</span>
           </div>
           <div class="modal-header-sub">Configure the active LLM powering natural language policy extraction and macroeconomic auditing</div>

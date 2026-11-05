@@ -308,7 +308,7 @@ const activeBudgetState: ActiveBudgetState = {
 
 export const server: FastifyInstance = Fastify({
   logger: process.env.NODE_ENV === "production",
-  bodyLimit: 1048576, // 1MB
+  bodyLimit: 25 * 1024 * 1024, // 25MB for document packages (PDF, DOCX, TXT)
 });
 
 // Safely handle empty JSON bodies on DELETE / POST requests
@@ -381,11 +381,11 @@ function validateScenarioRequest(body: unknown): ScenarioRunRequest {
     );
   }
 
-  if (rawPrompt.length > 4000) {
+  if (rawPrompt.length > 150000) {
     throw new GatewayHttpError(
       400,
       "VALIDATION_ERROR",
-      "Field 'raw_prompt' must not exceed 4,000 characters."
+      "Field 'raw_prompt' must not exceed 150,000 characters."
     );
   }
 
@@ -653,6 +653,73 @@ async function handleProposeScenario(
 
 server.post("/api/scenarios/run", handleProposeScenario);
 server.post("/api/chat/propose", handleProposeScenario);
+
+/**
+ * POST /api/chat/upload-package
+ * Business & Admin feature: Upload a PDF, DOCX, or TXT reform package document.
+ * Extracts the document text and runs a comprehensive budget simulation.
+ */
+server.post("/api/chat/upload-package", async (request: FastifyRequest, reply: FastifyReply) => {
+  await requireAuthHook(request, reply);
+  const user = request.user;
+  if (!user || (user.tier !== "business" && user.role !== "admin")) {
+    throw new GatewayHttpError(
+      403,
+      "TIER_RESTRICTED",
+      "Document package upload (PDF, TXT, DOCX) is exclusively available for Business tier and Administrators."
+    );
+  }
+
+  const body = (request.body as Record<string, unknown>) || {};
+  const filename = typeof body.filename === "string" ? body.filename.trim() : "";
+  const contentBase64 = typeof body.content_base64 === "string" ? body.content_base64.trim() : "";
+
+  if (!filename || !contentBase64) {
+    throw new GatewayHttpError(
+      400,
+      "MISSING_DOCUMENT",
+      "Both 'filename' and 'content_base64' are required."
+    );
+  }
+
+  // Forward document to Fiscal AI Engine for extraction
+  let extractedText: string;
+  try {
+    const upstream = await fetch(`${FISCAL_ENGINE_URL}/api/v1/extract-document`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename, content_base64: contentBase64 }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!upstream.ok) {
+      const errData = (await upstream.json().catch(() => ({}))) as any;
+      throw new GatewayHttpError(
+        upstream.status,
+        "DOCUMENT_EXTRACTION_FAILED",
+        errData.detail || "Failed to parse document text."
+      );
+    }
+    const data = (await upstream.json()) as any;
+    extractedText = data.text;
+  } catch (err: any) {
+    if (err instanceof GatewayHttpError) throw err;
+    throw new GatewayHttpError(
+      502,
+      "EXTRACTION_SERVICE_ERROR",
+      `Document parsing engine unreachable: ${err.message}`
+    );
+  }
+
+  // Prepend package source context for clear economist attribution
+  const policyPrompt = `[Uploaded Document Package: ${filename}]\n\n${extractedText}`;
+  request.body = {
+    raw_prompt: policyPrompt,
+    build_on_active_diagram: body.build_on_active_diagram !== false,
+    enable_search_grounding: Boolean(body.enable_search_grounding),
+  };
+
+  return handleProposeScenario(request, reply);
+});
 
 /**
  * POST /api/scenarios/:proposalId/apply

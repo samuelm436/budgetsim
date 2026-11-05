@@ -213,7 +213,7 @@ class SimulationRequest(BaseModel):
     raw_prompt: str = Field(
         ...,
         min_length=3,
-        max_length=4000,
+        max_length=150000,
         description="Freeform natural language policy proposal written by the user.",
     )
     country_code: Literal["DE"] = Field(
