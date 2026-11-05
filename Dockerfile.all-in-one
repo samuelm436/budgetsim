@@ -22,12 +22,16 @@ RUN pip install --no-cache-dir -r /app/fiscal_ai_engine/requirements.txt
 # 2. Install Node.js Gateway dependencies
 COPY gateway_service/package.json gateway_service/package-lock.json* /app/gateway_service/
 WORKDIR /app/gateway_service
-RUN npm ci --omit=dev || npm install --omit=dev
+RUN npm install
 
 # 3. Copy source codes
 WORKDIR /app
 COPY fiscal_ai_engine /app/fiscal_ai_engine
 COPY gateway_service /app/gateway_service
+
+# Build Gateway TypeScript to JS
+WORKDIR /app/gateway_service
+RUN npm run build
 
 # Create persistent data directory for SQLite
 RUN mkdir -p /app/data
@@ -64,10 +68,6 @@ stdout_logfile_maxbytes=0\n\
 stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
 ' > /etc/supervisor/conf.d/govsim.conf
-
-# Build Gateway TypeScript to JS
-WORKDIR /app/gateway_service
-RUN npx tsc
 
 WORKDIR /app
 
