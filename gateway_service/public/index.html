@@ -1400,16 +1400,26 @@
   <div class="workspace">
     <!-- Left Column: Conversational Policy Architect -->
     <aside class="chat-panel">
-      <div class="panel-header">
-        <h2>Policy Simulation Console</h2>
-        <label class="grounding-toggle" title="Enable live Google Web Search Grounding (adds ~15s latency). Leave unchecked for instant <6s simulation.">
+      <div class="panel-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+        <div>
+          <h2>Policy Simulation Console</h2>
+          <div id="chat-active-model-indicator" style="display:inline-flex; align-items:center; gap:6px; font-size:0.75rem; font-family:var(--font-mono); color:var(--text-secondary); margin-top:3px;">
+            <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10b981;"></span>
+            <span>Active Model: <strong id="chat-active-model-title" style="color:var(--text-primary);">GPT-6-Luna</strong></span>
+          </div>
+        </div>
+        <label class="grounding-toggle" title="Enable live Web Search (OpenAI web_search or Google Search Grounding for real-time empirical lookups).">
           <input type="checkbox" id="chk-grounding" />
-          <span>Live Web Grounding</span>
+          <span>Web Search</span>
         </label>
       </div>
 
       <div id="chat-messages">
         <div class="msg assistant">
+          <div style="display:flex; align-items:center; gap:5px; font-size:0.75rem; font-family:var(--font-mono); font-weight:700; color:#0284c7; margin-bottom:6px;">
+            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#0284c7;"></span>
+            <span id="welcome-active-model-badge">GPT-6-Luna</span>
+          </div>
           <p>
             <strong>2027 Federal Budget Baseline Loaded (Regierungsentwurf 2027).</strong><br />
             Core expenditures total <strong>€555.4B</strong> against <strong>€436.7B</strong> in non-credit revenues, leaving a net borrowing requirement of <strong>€118.7B</strong>.
@@ -1931,6 +1941,14 @@
       container.scrollTop = container.scrollHeight;
     }
 
+    function formatModelShortBadge(modelId) {
+      if (!modelId) return "GPT-6-Luna";
+      const id = modelId.toLowerCase();
+      if (id.includes("luna") || id.includes("gpt-6")) return "GPT-6-Luna";
+      if (id.includes("gemini")) return "Gemini 3.8 Flash";
+      return modelId;
+    }
+
     function appendProposalBubble(envelope) {
       const container = document.getElementById("chat-messages");
       const div = document.createElement("div");
@@ -1946,15 +1964,42 @@
         const isGood = (item.side === "revenue" && item.delta_bn > 0) || (item.side === "expenditure" && item.delta_bn < 0);
         linesHtml += `
           <div class="calc-delta-line">
-            <span class="calc-delta-name">${item.display_name} (${item. baseline_bn.toFixed(1)}B &rarr; ${item.proposed_bn.toFixed(1)}B)</span>
+            <span class="calc-delta-name">${item.display_name} (${item.baseline_bn.toFixed(1)}B &rarr; ${item.proposed_bn.toFixed(1)}B)</span>
             <span class="calc-delta-num ${isGood ? 'val-pos' : 'val-neg'}">${formatSignedBn(item.delta_bn)}</span>
           </div>
         `;
       });
 
       const secTime = (envelope.execution_time_ms / 1000).toFixed(1);
+      const rawModel = envelope.model_used || envelope.simulation?.metadata?.model_used || currentActiveModelId;
+      const modelBadge = formatModelShortBadge(rawModel);
+      const isGpt = modelBadge.toLowerCase().includes("gpt");
+      const extractionMode = envelope.simulation?.metadata?.extraction_mode || "";
+      const hasWebSearch = extractionMode.includes("WEB_SEARCH") || extractionMode.includes("GROUNDED") || Boolean(envelope.simulation?.metadata?.citations?.length);
+
+      let citationsHtml = "";
+      const citations = envelope.simulation?.metadata?.citations || [];
+      if (citations.length > 0) {
+        citationsHtml = `
+          <div style="margin-top:10px; padding:8px 10px; background:#f8fafc; border:1px solid var(--border-light); border-radius:6px; font-size:0.74rem;">
+            <div style="font-weight:700; color:var(--text-secondary); margin-bottom:4px; display:flex; align-items:center; gap:5px;">
+              <span>🌐 Web Search Sources:</span>
+            </div>
+            <ul style="margin:0; padding-left:18px; color:var(--text-muted);">
+              ${citations.slice(0, 4).map(c => `<li><a href="${c.uri}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:underline;">${c.title || c.uri}</a></li>`).join("")}
+            </ul>
+          </div>
+        `;
+      }
 
       div.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding-bottom:5px; border-bottom:1px solid rgba(0,0,0,0.06);">
+          <div style="display:inline-flex; align-items:center; gap:5px; font-size:0.75rem; font-family:var(--font-mono); font-weight:700; color:${isGpt ? '#0284c7' : '#7c3aed'};">
+            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:${isGpt ? '#0284c7' : '#7c3aed'};"></span>
+            ${modelBadge}
+          </div>
+          <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">${secTime}s${hasWebSearch ? ' &bull; 🌐 Web Search' : ''}</span>
+        </div>
         <p>${envelope.chat_reply.feedback_text}</p>
         <div class="calc-card">
           <div class="calc-card-header">
@@ -1976,8 +2021,9 @@
             </div>
           </div>
           <div class="calc-deltas">${linesHtml}</div>
+          ${citationsHtml}
           <div class="calc-card-actions">
-            <span class="exec-latency">${secTime}s &bull; gemini-3.8-flash</span>
+            <span class="exec-latency">${secTime}s &bull; <strong style="color:var(--text-primary); font-family:var(--font-mono);">${modelBadge}</strong></span>
             <button class="btn-apply" id="btn-apply-${card.proposal_id}" onclick="applyProposalToBudget('${card.proposal_id}')">
               Apply to Budget &rarr;
             </button>
@@ -2546,9 +2592,25 @@
         adminSection.style.display = isAdmin ? "block" : "none";
       }
 
+      if (authData.active_model) {
+        currentActiveModelId = authData.active_model;
+      }
+      const modelShortName = formatModelShortBadge(currentActiveModelId);
       const adminModelLabel = document.getElementById("popover-active-model-label");
-      if (adminModelLabel && authData.active_model) {
-        adminModelLabel.innerText = `${authData.active_model} ›`;
+      if (adminModelLabel) {
+        adminModelLabel.innerText = `${modelShortName} ›`;
+      }
+      const chatModelTitle = document.getElementById("chat-active-model-title");
+      if (chatModelTitle) {
+        chatModelTitle.innerText = modelShortName;
+      }
+      const welcomeBadge = document.getElementById("welcome-active-model-badge");
+      if (welcomeBadge) {
+        welcomeBadge.innerText = modelShortName;
+      }
+      const activeBadge = document.getElementById("active-model-badge");
+      if (activeBadge) {
+        activeBadge.innerText = currentActiveModelId;
       }
 
       const demoLoginsSection = document.getElementById("auth-demo-logins-section");
@@ -3021,12 +3083,8 @@
     // Admin AI Model Switching Controls
     // ========================================================================
     let availableModelsList = [
-      { id: "gpt-6-luna", name: "GPT-6-Luna (OpenAI)", provider: "openai", description: "High-knowledge, cost-efficient European-compliant reasoning model", recommended: true },
-      { id: "gpt-4o", name: "GPT-4o (OpenAI)", provider: "openai", description: "High-intelligence multimodal flagship model", recommended: false },
-      { id: "gpt-4o-mini", name: "GPT-4o-mini (OpenAI)", provider: "openai", description: "Fast, low-latency, budget-friendly OpenAI model", recommended: false },
-      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash (Google)", provider: "google", description: "DeepMind structured outputs with live Google Search grounding", recommended: false },
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (Google)", provider: "google", description: "Google DeepMind fast policy model", recommended: false },
-      { id: "glm-5.7-flash", name: "GLM-5.7 Flash (Zhipu AI)", provider: "zhipu", description: "Ultra low-cost alternative model", recommended: false },
+      { id: "gpt-6-luna", name: "GPT-6-Luna (OpenAI)", provider: "openai", description: "High-knowledge European-compliant reasoning model with OpenAI web search", recommended: true },
+      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash (Google)", provider: "google", description: "Google DeepMind structured outputs with live Google Search grounding", recommended: false },
     ];
     let currentActiveModelId = "gpt-6-luna";
 
@@ -3046,7 +3104,7 @@
           const data = await res.json();
           currentActiveModelId = data.active_model || "gpt-6-luna";
           if (data.available_models) {
-            availableModelsList = data.available_models;
+            availableModelsList = data.available_models.filter(m => m.id === "gpt-6-luna" || m.id === "gemini-3.8-flash");
           }
           const keyStatusEl = document.getElementById("openai-key-status");
           if (keyStatusEl) {
@@ -3122,8 +3180,12 @@
           return;
         }
 
-        msgEl.innerText = `✓ Active model successfully switched to ${currentActiveModelId}!`;
+        msgEl.innerText = `✓ Active model successfully switched to ${formatModelShortBadge(currentActiveModelId)}!`;
         msgEl.style.color = "var(--positive)";
+        const chatModelTitle = document.getElementById("chat-active-model-title");
+        if (chatModelTitle) chatModelTitle.innerText = formatModelShortBadge(currentActiveModelId);
+        const welcomeBadge = document.getElementById("welcome-active-model-badge");
+        if (welcomeBadge) welcomeBadge.innerText = formatModelShortBadge(currentActiveModelId);
         await refreshAuthMe();
 
         setTimeout(() => {
@@ -3415,7 +3477,7 @@
               autocomplete="off"
             />
             <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">
-              Enter your OpenAI API key to activate OpenAI models (GPT-6-Luna, GPT-4o). Saved securely in database.
+              Enter your OpenAI API key to activate GPT-6-Luna. Saved securely in database.
             </div>
           </div>
 

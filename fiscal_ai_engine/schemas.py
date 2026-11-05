@@ -174,9 +174,9 @@ class GroundingCitation(BaseModel):
         default=None,
         description="Key fiscal metric or factual excerpt supporting the simulation.",
     )
-    retrieved_via: Literal["GOOGLE_SEARCH_GROUNDING", "OFFICIAL_BASELINE_REGISTRY"] = Field(
+    retrieved_via: str = Field(
         default="OFFICIAL_BASELINE_REGISTRY",
-        description="Origin of the citation.",
+        description="Origin of the citation (e.g. GOOGLE_SEARCH_GROUNDING, OPENAI_WEB_SEARCH, OFFICIAL_BASELINE_REGISTRY).",
     )
 
 

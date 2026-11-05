@@ -234,6 +234,7 @@ export interface ChatCalculationCard {
 export interface GatewayProposalEnvelope {
   proposal_id: string;
   status: "PROPOSED" | "APPLIED";
+  model_used?: string;
   gateway_received_at: string;
   applied_at?: string;
   execution_time_ms: number;
@@ -628,6 +629,7 @@ async function handleProposeScenario(
   const envelope: GatewayProposalEnvelope & { usage?: any } = {
     proposal_id: proposalId,
     status: "PROPOSED",
+    model_used: simulationResult.metadata?.model_used || getSetting("active_model", "gpt-6-luna"),
     gateway_received_at: gatewayReceivedAt,
     execution_time_ms: executionTimeMs,
     chat_reply: {

@@ -159,12 +159,13 @@ class UnifiedPolicyExtractor:
         if provider == "google":
             return self._extract_via_gemini(raw_prompt, enable_search_grounding)
         else:
-            return self._extract_via_openai(raw_prompt)
+            return self._extract_via_openai(raw_prompt, enable_search_grounding)
 
     def _extract_via_openai(
-        self, raw_prompt: str
+        self, raw_prompt: str, enable_search_grounding: bool = False
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
-        """Extract policy using OpenAI model (e.g. GPT-6-Luna, GPT-4o)."""
+        """Extract policy using OpenAI model (e.g. GPT-6-Luna). Supports live OpenAI web search."""
+        import json
         from openai import OpenAI
 
         api_key = self.openai_api_key or os.getenv("OPENAI_API_KEY")
@@ -175,6 +176,62 @@ class UnifiedPolicyExtractor:
             )
 
         client = OpenAI(api_key=api_key, base_url=self.openai_base_url)
+
+        # 1. Live Web Search via OpenAI Responses API (web_search)
+        if enable_search_grounding:
+            try:
+                schema_json = json.dumps(PolicyExtractionSchema.model_json_schema())
+                resp = client.responses.create(
+                    model=self.model_name,
+                    input=raw_prompt,
+                    instructions=(
+                        SYSTEM_EXTRACTION_INSTRUCTION
+                        + f"\n\nCRITICAL: Respond ONLY with a valid JSON object complying exactly with this schema:\n{schema_json}"
+                    ),
+                    tools=[{"type": "web_search_preview"}],
+                )
+                output_text = getattr(resp, "output_text", "") or ""
+                citations: List[GroundingCitation] = []
+                for item in getattr(resp, "output", []) or []:
+                    if getattr(item, "type", None) == "web_search_call":
+                        action = getattr(item, "action", None)
+                        if action:
+                            for src in getattr(action, "sources", []) or []:
+                                url = getattr(src, "url", None)
+                                if url and not any(c.uri == url for c in citations):
+                                    citations.append(
+                                        GroundingCitation(
+                                            title="OpenAI Web Search Source",
+                                            uri=url,
+                                            snippet=f"Retrieved via OpenAI web search for: {getattr(action, 'query', '') or raw_prompt}",
+                                            retrieved_via="OPENAI_WEB_SEARCH",
+                                        )
+                                    )
+                            open_url = getattr(action, "url", None)
+                            if open_url and not any(c.uri == open_url for c in citations):
+                                citations.append(
+                                    GroundingCitation(
+                                        title="OpenAI Web Search Source",
+                                        uri=open_url,
+                                        snippet="Retrieved via OpenAI web search.",
+                                        retrieved_via="OPENAI_WEB_SEARCH",
+                                    )
+                                )
+
+                clean_json = output_text.strip()
+                if clean_json.startswith("```"):
+                    clean_json = clean_json.split("\n", 1)[1]
+                    if clean_json.endswith("```"):
+                        clean_json = clean_json.rsplit("```", 1)[0]
+                    clean_json = clean_json.strip()
+                parsed = PolicyExtractionSchema.model_validate_json(clean_json)
+                return parsed, f"OPENAI_WEB_SEARCH_{self.model_name.upper()}", citations
+            except Exception as search_err:
+                logger.warning(
+                    "OpenAI web_search response failed (%s), falling back to standard completion", search_err
+                )
+
+        # 2. Standard Structured Completion (no web search or fallback)
         call_kwargs = _openai_chat_kwargs(self.model_name, desired_temperature=0.1)
 
         try:
@@ -546,42 +603,14 @@ async def get_model_info(
                 "id": "gpt-6-luna",
                 "name": "GPT-6-Luna (OpenAI)",
                 "provider": "openai",
-                "description": "High-knowledge, cost-efficient European-compliant reasoning model",
+                "description": "High-knowledge European-compliant reasoning model with OpenAI web search",
                 "recommended": True,
-            },
-            {
-                "id": "gpt-4o",
-                "name": "GPT-4o (OpenAI)",
-                "provider": "openai",
-                "description": "High-intelligence multimodal flagship model",
-                "recommended": False,
-            },
-            {
-                "id": "gpt-4o-mini",
-                "name": "GPT-4o-mini (OpenAI)",
-                "provider": "openai",
-                "description": "Fast, low-latency, budget-friendly OpenAI model",
-                "recommended": False,
             },
             {
                 "id": "gemini-3.8-flash",
                 "name": "Gemini 3.8 Flash (Google)",
                 "provider": "google",
                 "description": "Google DeepMind structured outputs with live Google Search grounding",
-                "recommended": False,
-            },
-            {
-                "id": "gemini-2.5-flash",
-                "name": "Gemini 2.5 Flash (Google)",
-                "provider": "google",
-                "description": "Google DeepMind high-speed policy model",
-                "recommended": False,
-            },
-            {
-                "id": "glm-5.7-flash",
-                "name": "GLM-5.7 Flash (Zhipu AI)",
-                "provider": "zhipu",
-                "description": "Ultra low-cost alternative with comparable reasoning performance",
                 "recommended": False,
             },
         ],
