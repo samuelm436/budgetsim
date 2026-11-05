@@ -355,44 +355,42 @@
       background: var(--bg-app);
     }
 
-    /* Executive KPI Strip */
+    /* Executive KPI Strip — Sleek, borderless institutional design */
     .kpi-strip {
       display: grid;
-      grid-template-columns: repeat(4, 1fr) auto;
-      gap: 16px;
-      padding: 14px 28px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 36px;
+      padding: 16px 32px;
       background: var(--bg-panel);
       border-bottom: 1px solid var(--border-light);
-      align-items: center;
+      align-items: flex-start;
     }
 
     .kpi-card {
-      border-left: 3px solid var(--border-strong);
-      padding-left: 12px;
+      border: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
     }
 
-    .kpi-card.rev { border-left-color: #1d4ed8; }
-    .kpi-card.exp { border-left-color: #334155; }
-    .kpi-card.bor { border-left-color: #d97706; }
-    .kpi-card.del { border-left-color: #047857; }
-
     .kpi-title {
-      font-size: 0.7rem;
+      font-size: 0.67rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.08em;
       color: var(--text-muted);
+      margin-bottom: 4px;
     }
 
     .kpi-main {
       font-family: var(--font-mono);
-      font-size: 1.15rem;
+      font-size: 1.3rem;
       font-weight: 700;
       color: var(--text-primary);
-      margin-top: 2px;
       display: flex;
       align-items: baseline;
       gap: 8px;
+      line-height: 1.1;
     }
 
     .kpi-sub {
@@ -400,85 +398,215 @@
       font-size: 0.72rem;
       font-weight: 500;
       color: var(--text-muted);
+      margin-top: 4px;
     }
 
-    /* Reset Toolbar */
+    /* Executive Toolbar */
     .view-toolbar {
-      padding: 12px 28px;
+      padding: 10px 32px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--border-light);
-      background: var(--bg-subtle);
+      background: #fafafa;
+      position: relative;
     }
 
     .toolbar-right {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
+      position: relative;
     }
 
     .applied-count-badge {
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
+      font-family: var(--font-sans);
+      font-size: 0.76rem;
       color: var(--text-secondary);
-      background: var(--bg-panel);
-      border: 1px solid var(--border-strong);
-      padding: 6px 12px;
-      border-radius: 4px;
+      background: transparent;
+      border: 1px solid var(--border-light);
+      padding: 5px 12px;
+      border-radius: 999px;
       transition: all 0.15s ease;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-weight: 600;
+      font-weight: 500;
       user-select: none;
     }
 
     .applied-count-badge:hover {
-      background: var(--accent-soft);
-      border-color: var(--accent);
-      color: var(--accent);
-      transform: translateY(-1px);
+      background: var(--bg-panel);
+      border-color: var(--border-strong);
+      color: var(--text-primary);
     }
 
-    .btn-tool {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-strong);
-      color: var(--text-secondary);
-      padding: 6px 12px;
-      border-radius: 4px;
-      font-size: 0.78rem;
-      font-weight: 600;
+    .btn-reset {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      font-size: 0.76rem;
+      font-weight: 500;
       cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .btn-reset:hover {
+      color: var(--negative);
+    }
+
+    /* Account Menu Pill & Floating Popover */
+    .btn-account-pill {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-light);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-primary);
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 8px;
+      cursor: pointer;
       transition: all 0.15s ease;
       user-select: none;
     }
 
-    .btn-tool:hover {
-      background: #e2e8f0;
+    .btn-account-pill:hover {
+      border-color: var(--border-strong);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .avatar-circle {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--brand);
+      color: #ffffff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .account-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 280px;
+      background: #ffffff;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.12), 0 4px 6px -2px rgba(15, 23, 42, 0.04);
+      z-index: 2000;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      animation: popoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes popoverFadeIn {
+      from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .account-popover.hidden {
+      display: none !important;
+    }
+
+    .popover-header {
+      padding: 6px 8px 10px 8px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .popover-user-name {
+      font-size: 0.86rem;
+      font-weight: 700;
       color: var(--text-primary);
-      border-color: #94a3b8;
     }
 
-    .btn-reset {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-strong);
-      color: var(--text-secondary);
-      padding: 6px 12px;
+    .popover-user-email {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .popover-tier-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 0.72rem;
+    }
+
+    .popover-tier-pill {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 6px;
       border-radius: 4px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      cursor: pointer;
+      text-transform: uppercase;
+      background: #eff6ff;
+      color: #1d4ed8;
     }
 
-    .btn-reset:hover {
-      background: var(--negative-bg);
+    .popover-quota-bar {
+      margin-top: 6px;
+      width: 100%;
+      height: 4px;
+      background: #f1f5f9;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .popover-quota-fill {
+      height: 100%;
+      background: #2563eb;
+      transition: width 0.3s ease;
+    }
+
+    .popover-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .popover-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: background 0.12s ease;
+      text-align: left;
+      width: 100%;
+    }
+
+    .popover-item:hover {
+      background: #f8fafc;
+    }
+
+    .popover-item.danger {
       color: var(--negative);
-      border-color: #fca5a5;
+    }
+    .popover-item.danger:hover {
+      background: #fef2f2;
+    }
+
+    .popover-divider {
+      height: 1px;
+      background: #f1f5f9;
+      margin: 4px 0;
     }
 
     /* Modal Dialog for Applied Reforms Package */
@@ -1345,27 +1473,71 @@
         </div>
       </section>
 
-      <!-- Sub-Toolbar (Reforms status, Scenario Database Saves & Auth) -->
+      <!-- Executive Toolbar -->
       <div class="view-toolbar">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">
-            2027 Budget Overview
-          </div>
-          <span id="active-scenario-tag" class="scenario-pill" title="Active Fiscal Scenario">Baseline 2027 Draft</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em;">
+            Federal Budget 2027
+          </span>
+          <span id="active-scenario-tag" class="scenario-pill" title="Active Fiscal Scenario">Government Draft (Baseline)</span>
         </div>
         <div class="toolbar-right">
-          <button class="btn-tool" onclick="openSaveScenarioModal()" title="Save current reform scenario to cloud database">💾 Save Scenario</button>
-          <button class="btn-tool" onclick="openMyScenariosModal()" title="Load or manage your saved scenarios">📂 My Scenarios <span id="scenario-count-badge" style="font-weight:700;">(0)</span></button>
           <button
             class="applied-count-badge"
             id="applied-badge"
             onclick="openReformsModal()"
-            title="Click to view widgets and short descriptions of all applied reforms"
+            title="Review applied policy changes and macroeconomic reality check"
           >
             0 Reforms Applied &rsaquo;
           </button>
-          <div id="auth-status-container" class="auth-container"></div>
-          <button class="btn-reset" onclick="resetTo2027Draft()">Reset</button>
+          <button class="btn-reset" onclick="resetTo2027Draft()" title="Reset to un-modified 2027 Government Draft">
+            Reset
+          </button>
+          <div id="account-menu-trigger-container">
+            <!-- Account Menu Button populated dynamically -->
+          </div>
+          <!-- Floating Account Popover -->
+          <div id="account-popover" class="account-popover hidden" onclick="event.stopPropagation()">
+            <div class="popover-header">
+              <div class="popover-user-name" id="popover-user-name">Guest User</div>
+              <div class="popover-user-email" id="popover-user-email">Anonymous Session</div>
+              <div class="popover-tier-row">
+                <span style="color:var(--text-muted); font-size:0.72rem;">Account Tier</span>
+                <span class="popover-tier-pill" id="popover-tier-pill">GUEST</span>
+              </div>
+              <div class="popover-quota-bar">
+                <div class="popover-quota-fill" id="popover-quota-fill" style="width: 100%;"></div>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-top:4px; font-size:0.68rem; color:var(--text-muted);">
+                <span>Daily Quota</span>
+                <span id="popover-quota-text">1 / 1 simulation left</span>
+              </div>
+            </div>
+            <div class="popover-menu">
+              <div style="font-size:0.65rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; padding:6px 10px 2px 10px;">
+                Workspace
+              </div>
+              <button class="popover-item" onclick="closeAccountMenu(); openMyScenariosModal();">
+                <span>Saved Scenarios</span>
+                <span id="popover-scenarios-badge" style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-muted);">(0)</span>
+              </button>
+              <button class="popover-item" onclick="closeAccountMenu(); openSaveScenarioModal();">
+                <span>Save Current State</span>
+              </button>
+              <div class="popover-divider"></div>
+              <div style="font-size:0.65rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; padding:4px 10px 2px 10px;">
+                Plan & Limits
+              </div>
+              <button class="popover-item" onclick="closeAccountMenu(); openTierUpgradeModal();">
+                <span>Switch / Test Tier</span>
+                <span id="popover-switch-tier-label" style="font-size:0.7rem; color:var(--accent);">Pro &rsaquo;</span>
+              </button>
+              <div class="popover-divider"></div>
+              <button class="popover-item danger" id="popover-auth-btn" onclick="handleAccountAction()">
+                Sign Out
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2247,8 +2419,59 @@
     let authModalTab = "login";
     let activeScenarioId = null;
 
+    function toggleAccountMenu(event) {
+      if (event) event.stopPropagation();
+      const popover = document.getElementById("account-popover");
+      if (popover) {
+        popover.classList.toggle("hidden");
+      }
+    }
+
+    function closeAccountMenu() {
+      const popover = document.getElementById("account-popover");
+      if (popover) popover.classList.add("hidden");
+    }
+
+    document.addEventListener("click", (e) => {
+      const popover = document.getElementById("account-popover");
+      const trigger = document.getElementById("account-menu-trigger-container");
+      if (popover && !popover.classList.contains("hidden")) {
+        if (!popover.contains(e.target) && !trigger?.contains(e.target)) {
+          closeAccountMenu();
+        }
+      }
+    });
+
+    function handleAccountAction() {
+      closeAccountMenu();
+      if (currentAuthUser) {
+        logoutUser();
+      } else {
+        openAuthModal("login");
+      }
+    }
+
+    async function checkKeycloakStatus() {
+      try {
+        const res = await fetch("/api/auth/keycloak/status");
+        const data = await res.json();
+        const linkEl = document.getElementById("keycloak-institutional-link");
+        if (linkEl && data.available) {
+          linkEl.style.display = "block";
+        }
+      } catch {}
+    }
+
     async function initAuth() {
+      // Check for OAuth / Keycloak callback redirect ?token=
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get("token");
+      if (urlToken) {
+        localStorage.setItem("govsim_auth_token", urlToken);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
       await refreshAuthMe();
+      await checkKeycloakStatus();
     }
 
     async function refreshAuthMe() {
@@ -2265,7 +2488,7 @@
         if (data.authenticated) {
           refreshScenariosCount();
         } else {
-          const badge = document.getElementById("scenario-count-badge");
+          const badge = document.getElementById("popover-scenarios-badge");
           if (badge) badge.innerText = "(0)";
         }
       } catch (err) {
@@ -2287,45 +2510,74 @@
     }
 
     function renderAuthStatus(authData) {
-      const container = document.getElementById("auth-status-container");
-      if (!container) return;
+      const triggerContainer = document.getElementById("account-menu-trigger-container");
+      const nameEl = document.getElementById("popover-user-name");
+      const emailEl = document.getElementById("popover-user-email");
+      const tierPill = document.getElementById("popover-tier-pill");
+      const quotaText = document.getElementById("popover-quota-text");
+      const quotaFill = document.getElementById("popover-quota-fill");
+      const authBtn = document.getElementById("popover-auth-btn");
+      const switchTierLabel = document.getElementById("popover-switch-tier-label");
 
       if (authData.authenticated && authData.user) {
         const u = authData.user;
         const tier = u.tier || "free";
-        const usage = authData.usage || { remaining: 10, max_limit: 10 };
+        const usage = authData.usage || { remaining: 10, max_limit: 10, current_count: 0 };
         const initial = (u.name || u.email).slice(0, 1).toUpperCase();
 
-        container.innerHTML = `
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:var(--brand); color:#fff; font-size:0.75rem; font-weight:700;">
-              ${initial}
-            </div>
-            <span style="font-size:0.78rem; font-weight:600; color:var(--text-primary); max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${u.name}</span>
-            <span class="auth-badge ${tier}" title="${usage.remaining} simulations remaining today">
-              ${tier.toUpperCase()}: ${usage.remaining}/${usage.max_limit}
-            </span>
-            <button class="btn-auth btn-auth-secondary" onclick="openTierUpgradeModal()" title="Switch or test tier limits">
-              ⚡ Tiers
+        if (triggerContainer) {
+          triggerContainer.innerHTML = `
+            <button class="btn-account-pill" onclick="toggleAccountMenu(event)" title="Open Account Menu">
+              <span class="avatar-circle">${initial}</span>
+              <span>${u.name}</span>
+              <span style="font-size:0.65rem; color:var(--text-muted);">&#9662;</span>
             </button>
-            <button class="btn-auth btn-auth-secondary" onclick="logoutUser()" title="Sign out of GovSim">
-              Sign Out
-            </button>
-          </div>
-        `;
+          `;
+        }
+
+        if (nameEl) nameEl.innerText = u.name;
+        if (emailEl) emailEl.innerText = u.email;
+        if (tierPill) {
+          tierPill.innerText = tier.toUpperCase();
+        }
+        if (switchTierLabel) switchTierLabel.innerText = `${tier.toUpperCase()} ›`;
+
+        const pct = Math.min(100, Math.max(0, (usage.remaining / Math.max(1, usage.max_limit)) * 100));
+        if (quotaFill) quotaFill.style.width = `${pct}%`;
+        if (quotaText) quotaText.innerText = `${usage.remaining} / ${usage.max_limit} left today`;
+
+        if (authBtn) {
+          authBtn.innerText = "Sign Out";
+          authBtn.className = "popover-item danger";
+        }
       } else {
-        const usage = authData.usage || { remaining: 1, max_limit: 1 };
-        container.innerHTML = `
-          <span class="auth-badge guest" title="1 free simulation preview">
-            Guest: ${usage.remaining}/1 Left
-          </span>
-          <button class="btn-auth btn-auth-secondary" onclick="openAuthModal('login')">
-            Sign In
-          </button>
-          <button class="btn-auth btn-auth-primary" onclick="openAuthModal('register')">
-            Register Free
-          </button>
-        `;
+        const usage = authData.usage || { remaining: 1, max_limit: 1, current_count: 0 };
+
+        if (triggerContainer) {
+          triggerContainer.innerHTML = `
+            <button class="btn-account-pill" onclick="toggleAccountMenu(event)" title="Open Account Menu">
+              <span>Guest Analyst</span>
+              <span style="color:#f59e0b; font-size:0.65rem;">●</span>
+              <span style="font-size:0.65rem; color:var(--text-muted);">&#9662;</span>
+            </button>
+          `;
+        }
+
+        if (nameEl) nameEl.innerText = "Guest Analyst";
+        if (emailEl) emailEl.innerText = "Anonymous Session";
+        if (tierPill) {
+          tierPill.innerText = "GUEST";
+        }
+        if (switchTierLabel) switchTierLabel.innerText = "Free / Pro ›";
+
+        const pct = usage.remaining > 0 ? 100 : 0;
+        if (quotaFill) quotaFill.style.width = `${pct}%`;
+        if (quotaText) quotaText.innerText = `${usage.remaining} / 1 simulation left`;
+
+        if (authBtn) {
+          authBtn.innerText = "Sign In / Register";
+          authBtn.className = "popover-item";
+        }
       }
     }
 
@@ -2399,11 +2651,6 @@
         email = prompt("Enter Apple ID Email:", "user.apple@privaterelay.appleid.com");
         if (!email) return;
         name = "Apple User";
-      } else if (provider === "keycloak") {
-        email = prompt("Enter Keycloak Single Sign-On Username/Email:", "journalist@keycloak.govsim.eu");
-        if (!email) return;
-        name = "Keycloak SSO Analyst";
-        tier = "pro";
       }
 
       try {
@@ -2780,7 +3027,7 @@
         <button class="btn-modal-close" onclick="closeAuthModal()">&times;</button>
       </div>
       <div class="modal-body" style="background:#ffffff;">
-        <!-- Social & Keycloak SSO Buttons -->
+        <!-- Social Identity Login (Google & Apple) -->
         <div class="social-btn-group">
           <button class="social-btn google" onclick="handleSocialLogin('google')">
             <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
@@ -2790,10 +3037,11 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.4c.66-.82 1.11-1.96.99-3.1-.97.04-2.16.65-2.85 1.46-.61.71-1.14 1.87-.99 2.98 1.09.08 2.2-.53 2.85-1.34z"/></svg>
             Continue with Apple
           </button>
-          <button class="social-btn keycloak" onclick="handleSocialLogin('keycloak')">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/></svg>
-            Sign in with Keycloak (SSO)
-          </button>
+        </div>
+        <div id="keycloak-institutional-link" style="text-align:center; margin-bottom: 12px; display: none;">
+          <a href="/api/auth/keycloak/login" style="font-size: 0.74rem; color: var(--accent); text-decoration: none; font-weight: 500;">
+            Sign in through Institutional Identity Provider &rarr;
+          </a>
         </div>
 
         <div style="display:flex; align-items:center; gap:10px; margin: 14px 0;">

@@ -11,6 +11,7 @@ import path from "path";
 import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
+import jwt from "jsonwebtoken";
 import {
   db,
   findUserByEmail,
@@ -983,6 +984,120 @@ server.get("/api/scenarios", async (_request: FastifyRequest, reply: FastifyRepl
     apply_button: item.chat_reply.calculation_card.apply_button,
   }));
   return reply.status(200).send({ count: summaries.length, proposals: summaries });
+});
+
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL || "http://localhost:8080";
+const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || "govsim";
+const KEYCLOAK_CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || "govsim-web";
+
+/**
+ * GET /api/auth/keycloak/login
+ * Initiates the standard OpenID Connect authorization code redirect to Keycloak.
+ */
+server.get("/api/auth/keycloak/login", async (request: FastifyRequest, reply: FastifyReply) => {
+  const host = request.headers.host || "localhost:3000";
+  const protocol = request.headers["x-forwarded-proto"] || "http";
+  const redirectUri = `${protocol}://${host}/api/auth/keycloak/callback`;
+
+  const authUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth?client_id=${KEYCLOAK_CLIENT_ID}&response_type=code&scope=openid%20profile%20email&redirect_uri=${encodeURIComponent(
+    redirectUri
+  )}`;
+
+  return reply.redirect(authUrl);
+});
+
+/**
+ * GET /api/auth/keycloak/callback
+ * Exchanges Keycloak authorization code for JWT access token and logs user into GovSim.
+ */
+server.get<{ Querystring: { code?: string; error?: string } }>(
+  "/api/auth/keycloak/callback",
+  async (request, reply) => {
+    const { code, error } = request.query;
+
+    if (error || !code) {
+      return reply.redirect(`/?auth_error=${encodeURIComponent(error || "Authorization cancelled")}`);
+    }
+
+    const host = request.headers.host || "localhost:3000";
+    const protocol = request.headers["x-forwarded-proto"] || "http";
+    const redirectUri = `${protocol}://${host}/api/auth/keycloak/callback`;
+
+    try {
+      const tokenRes = await fetch(
+        `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            client_id: KEYCLOAK_CLIENT_ID,
+            code,
+            redirect_uri: redirectUri,
+          }),
+        }
+      );
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.error("[Keycloak] Token exchange failed:", errText);
+        return reply.redirect(`/?auth_error=Token+exchange+failed`);
+      }
+
+      const tokenData = (await tokenRes.json()) as any;
+      const idToken = tokenData.id_token || tokenData.access_token;
+      const unverified = jwt.decode(idToken) as any;
+
+      const email = unverified?.email || `${unverified?.preferred_username || unverified?.sub || "user"}@keycloak.local`;
+      const name = unverified?.name || unverified?.preferred_username || "Keycloak User";
+      const roles: string[] = unverified?.realm_access?.roles || [];
+
+      let tier: UserTier = "free";
+      if (roles.includes("pro") || roles.includes("tier_pro") || roles.includes("journalist")) {
+        tier = "pro";
+      } else if (roles.includes("business") || roles.includes("enterprise")) {
+        tier = "business";
+      }
+
+      const user = syncExternalUser({
+        email,
+        name,
+        provider: "keycloak",
+        providerId: unverified?.sub || `kc_${Date.now()}`,
+        tier,
+      });
+
+      const sessionToken = signUserToken(user);
+      return reply.redirect(`/?token=${sessionToken}`);
+    } catch (err: any) {
+      console.error("[Keycloak] Callback error:", err);
+      return reply.redirect(`/?auth_error=${encodeURIComponent(err.message)}`);
+    }
+  }
+);
+
+/**
+ * GET /api/auth/keycloak/status
+ * Returns whether Keycloak is currently live and reachable.
+ */
+server.get("/api/auth/keycloak/status", async (_request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const res = await fetch(`${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`, {
+      method: "GET",
+      signal: AbortSignal.timeout(2000),
+    });
+    return reply.status(200).send({
+      available: res.ok,
+      realm: KEYCLOAK_REALM,
+      url: KEYCLOAK_URL,
+    });
+  } catch {
+    return reply.status(200).send({
+      available: false,
+      realm: KEYCLOAK_REALM,
+      url: KEYCLOAK_URL,
+    });
+  }
 });
 
 // ============================================================================
