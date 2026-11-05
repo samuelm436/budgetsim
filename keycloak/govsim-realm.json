@@ -79,7 +79,7 @@
     {
       "alias": "apple",
       "displayName": "Apple",
-      "providerId": "apple",
+      "providerId": "oidc",
       "enabled": true,
       "updateProfileFirstLoginMode": "off",
       "trustEmail": true,
@@ -90,9 +90,12 @@
       "firstBrokerLoginFlowAlias": "first broker login",
       "config": {
         "clientId": "com.govsim.auth",
-        "teamId": "YOUR_APPLE_TEAM_ID",
-        "keyId": "YOUR_APPLE_KEY_ID",
-        "defaultScope": "name email"
+        "authorizationUrl": "https://appleid.apple.com/auth/authorize",
+        "tokenUrl": "https://appleid.apple.com/auth/token",
+        "clientAuthMethod": "client_secret_post",
+        "defaultScope": "name email",
+        "useJwksUrl": "true",
+        "jwksUrl": "https://appleid.apple.com/auth/keys"
       }
     }
   ]
