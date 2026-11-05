@@ -1729,6 +1729,26 @@ export async function startServer(): Promise<FastifyInstance> {
   console.log(
     `[gateway_service] Listening on http://0.0.0.0:${PORT} -> forwarding to ${FISCAL_ENGINE_URL}`
   );
+
+  // Synchronize stored model & API key from SQLite to Fiscal AI Engine
+  setTimeout(async () => {
+    try {
+      const storedModel = getSetting("active_model", "gpt-6-luna");
+      const storedKey = getSetting("openai_api_key", undefined);
+      if (storedModel || storedKey) {
+        await fetch(`${FISCAL_ENGINE_URL}/api/v1/model`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model_name: storedModel, api_key: storedKey }),
+          signal: AbortSignal.timeout(5000),
+        });
+        console.log(`[gateway_service] Synchronized active model '${storedModel}' and API credentials to Fiscal Engine.`);
+      }
+    } catch (e: any) {
+      console.warn("[gateway_service] Initial sync to Fiscal Engine deferred:", e.message);
+    }
+  }, 1000);
+
   return server;
 }
 

@@ -426,7 +426,7 @@ class ApplyActionMetadata(BaseModel):
 class SimulationMetadata(BaseModel):
     """Execution metadata, formulas, and provenance."""
 
-    extraction_mode: Literal["GEMINI_STRUCTURED_GROUNDED", "DIRECT_OVERRIDE"] = Field(
+    extraction_mode: str = Field(
         ..., description="How the natural language prompt was translated into policy parameters."
     )
     model_used: str = Field(

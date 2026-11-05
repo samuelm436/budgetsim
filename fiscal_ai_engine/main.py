@@ -101,6 +101,21 @@ Core Principles of Logical & Economic Consistency:
 Output strictly valid JSON complying with the requested schema."""
 
 
+def _openai_chat_kwargs(model_name: str, desired_temperature: Optional[float] = None) -> Dict[str, Any]:
+    """
+    Build kwargs for OpenAI completions.
+    Models like GPT-6-Luna, o1, o3, and next-gen reasoning models reject custom temperature
+    values (OpenAI returns 400: "Unsupported value: 'temperature' does not support 0.1 with this model. Only the default (1) value is supported.").
+    For these models, omit the temperature parameter completely so OpenAI uses its internal default.
+    """
+    m = (model_name or "").lower()
+    if any(k in m for k in ("gpt-6", "o1", "o3", "reasoning", "luna")):
+        return {}
+    if desired_temperature is not None:
+        return {"temperature": desired_temperature}
+    return {}
+
+
 class UnifiedPolicyExtractor:
     """Multi-provider LLM extractor supporting OpenAI (GPT-6-Luna, GPT-4o, etc.),
     Google Gemini (gemini-3.8-flash, gemini-2.5-flash), and GLM models."""
@@ -160,6 +175,7 @@ class UnifiedPolicyExtractor:
             )
 
         client = OpenAI(api_key=api_key, base_url=self.openai_base_url)
+        call_kwargs = _openai_chat_kwargs(self.model_name, desired_temperature=0.1)
 
         try:
             completion = client.beta.chat.completions.parse(
@@ -169,14 +185,33 @@ class UnifiedPolicyExtractor:
                     {"role": "user", "content": raw_prompt},
                 ],
                 response_format=PolicyExtractionSchema,
-                temperature=0.1,
+                **call_kwargs,
             )
             parsed = completion.choices[0].message.parsed
             if not parsed:
                 raise ValueError("Parsed output was null.")
             return parsed, f"OPENAI_STRUCTURED_{self.model_name.upper()}", []
         except Exception as e:
+            err_str = str(e).lower()
+            if "temperature" in err_str:
+                logger.warning("Retrying beta parse for %s without temperature due to: %s", self.model_name, e)
+                try:
+                    completion = client.beta.chat.completions.parse(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_EXTRACTION_INSTRUCTION},
+                            {"role": "user", "content": raw_prompt},
+                        ],
+                        response_format=PolicyExtractionSchema,
+                    )
+                    parsed = completion.choices[0].message.parsed
+                    if parsed:
+                        return parsed, f"OPENAI_STRUCTURED_{self.model_name.upper()}", []
+                except Exception as retry_err:
+                    logger.warning("Retry without temperature also failed: %s", retry_err)
+
             logger.warning("Beta parse failed for %s (%s), falling back to json_object", self.model_name, e)
+            fallback_kwargs = {} if "temperature" in err_str else call_kwargs
             completion = client.chat.completions.create(
                 model=self.model_name,
                 messages=[
@@ -188,7 +223,7 @@ class UnifiedPolicyExtractor:
                     {"role": "user", "content": raw_prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,
+                **fallback_kwargs,
             )
             content = completion.choices[0].message.content or "{}"
             parsed = PolicyExtractionSchema.model_validate_json(content)
@@ -350,6 +385,7 @@ Provide:
 
         client = OpenAI(api_key=api_key, base_url=self.openai_base_url)
         prompt_content = self._build_macro_prompt(applied_proposals, active_summary)
+        call_kwargs = _openai_chat_kwargs(self.model_name, desired_temperature=0.2)
 
         try:
             completion = client.beta.chat.completions.parse(
@@ -359,14 +395,33 @@ Provide:
                     {"role": "user", "content": prompt_content},
                 ],
                 response_format=MacroAssessmentCritiqueSchema,
-                temperature=0.2,
+                **call_kwargs,
             )
             parsed = completion.choices[0].message.parsed
             if not parsed:
                 raise ValueError("Parsed critique was null.")
             return parsed
         except Exception as e:
+            err_str = str(e).lower()
+            if "temperature" in err_str:
+                logger.warning("Retrying macro critique for %s without temperature due to: %s", self.model_name, e)
+                try:
+                    completion = client.beta.chat.completions.parse(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "system", "content": MACRO_AUDIT_INSTRUCTION},
+                            {"role": "user", "content": prompt_content},
+                        ],
+                        response_format=MacroAssessmentCritiqueSchema,
+                    )
+                    parsed = completion.choices[0].message.parsed
+                    if parsed:
+                        return parsed
+                except Exception as retry_err:
+                    logger.warning("Retry macro critique without temperature also failed: %s", retry_err)
+
             logger.warning("Beta parse failed for macro critique (%s), falling back to json_object", e)
+            fallback_kwargs = {} if "temperature" in err_str else call_kwargs
             completion = client.chat.completions.create(
                 model=self.model_name,
                 messages=[
@@ -378,7 +433,7 @@ Provide:
                     {"role": "user", "content": prompt_content},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2,
+                **fallback_kwargs,
             )
             content = completion.choices[0].message.content or "{}"
             return MacroAssessmentCritiqueSchema.model_validate_json(content)
