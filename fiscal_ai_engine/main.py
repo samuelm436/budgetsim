@@ -46,7 +46,7 @@ logging.basicConfig(
 
 
 SYSTEM_EXTRACTION_INSTRUCTION = """You are the Chief Fiscal Economist AI for GovSim AI.
-Speed & Precision Directive: Be concise, decisive, and institutional. All outputs must be in crisp English.
+Speed & Precision Directive: Be decisive, mathematically exact, and institutional. All outputs must be in crisp English.
 
 Baseline: German Federal Budget 2027 Draft (Regierungsentwurf, €555.4B Exp / €436.7B Rev / €118.7B Deficit / 68.8M adults).
 
@@ -56,10 +56,16 @@ Revenue Categories:
 Expenditure Categories (2027 Einzelpläne):
 - `labor_and_social_affairs_ep11` (€201.5B) | `defense_and_security_ep14` (€109.7B) | `federal_debt_interest_ep32` (€43.6B) | `transport_and_digital_ep12` (€26.4B) | `research_tech_and_aerospace_ep30` (€22.0B) | `family_education_and_youth_ep17` (€15.5B) | `economic_affairs_energy_climate_ep09_16` (€8.3B) | `general_financial_admin_and_other` (€128.4B)
 
-Extraction Rules (High-Speed Execution):
-1. `chat_feedback`: Strictly 1-2 concise, executive sentences. State the mapped budget action and resulting net borrowing effect. No conversational filler.
-2. `policy_name`: Punchy title under 5 words.
-3. `budget_modifications`: Output ONLY the modified line items using:
+COMPREHENSIVE MULTI-MEASURE EXTRACTION MANDATE:
+- When provided with an extensive reform package, multi-part legislative proposal, omnibus bill, or uploaded document:
+  You MUST thoroughly extract and model EVERY SINGLE policy measure, tax adjustment, expenditure alteration, and subsidy change present in the input.
+  DO NOT sample, summarize, or partially pick only 1 or 2 parts of the package.
+  Every distinct fiscal measure with an impact MUST have its own dedicated item in `budget_modifications`. If there are 5, 10, or 20 distinct measures, all of them must be individually included.
+
+Extraction Rules:
+1. `chat_feedback`: 1-2 concise, executive sentences summarizing the full package and the net borrowing impact.
+2. `policy_name`: Institutional title under 6 words describing the complete reform package.
+3. `budget_modifications`: Output an entry for EVERY modified line item using:
    - `DELTA_BN` (+/- EUR billions), `DELTA_PCT` (decimal percent, e.g. -0.05), `SET_ABSOLUTE_BN`, `ABOLISH` (value in savings), or `NEW_LINE_BN`.
 4. `rationale` & `extracted_assumptions`: 1 short sentence each.
 5. If decile tax rates shift (1-10), populate `parameters.tax_bracket_shifts`. If per-capita transfer/dividend, populate `parameters.transfer_formula`.
@@ -76,17 +82,22 @@ Core Principles:
 Output strictly valid JSON complying with the requested schema."""
 
 
-def _openai_chat_kwargs(model_name: str, desired_temperature: Optional[float] = None) -> Dict[str, Any]:
+def _openai_chat_kwargs(
+    model_name: str,
+    desired_temperature: Optional[float] = None,
+    reasoning_effort: str = "low",
+) -> Dict[str, Any]:
     """
     Build kwargs for OpenAI completions.
     Models like GPT-6-Luna, o1, o3, and next-gen reasoning models reject custom temperature
-    values (OpenAI returns 400). For those models, omit temperature and pass reasoning_effort="low"
-    to maximize response speed.
+    values (OpenAI returns 400). For those models, omit temperature and pass reasoning_effort
+    and high max_completion_tokens.
     """
     m = (model_name or "").lower()
     kwargs: Dict[str, Any] = {}
     if any(k in m for k in ("gpt-6", "o1", "o3", "reasoning", "luna")):
-        kwargs["reasoning_effort"] = "low"
+        kwargs["reasoning_effort"] = reasoning_effort if reasoning_effort in ("low", "medium", "high") else "low"
+        kwargs["max_completion_tokens"] = 16384
         return kwargs
     if desired_temperature is not None:
         kwargs["temperature"] = desired_temperature
@@ -129,17 +140,23 @@ class UnifiedPolicyExtractor:
         os.environ["ACTIVE_MODEL"] = model_name
 
     def extract_policy(
-        self, raw_prompt: str, enable_search_grounding: bool = False
+        self,
+        raw_prompt: str,
+        enable_search_grounding: bool = False,
+        reasoning_effort: str = "low",
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
         """Extract structured policy parameters via the active LLM provider."""
         provider = self.get_provider()
         if provider == "google":
             return self._extract_via_gemini(raw_prompt, enable_search_grounding)
         else:
-            return self._extract_via_openai(raw_prompt, enable_search_grounding)
+            return self._extract_via_openai(raw_prompt, enable_search_grounding, reasoning_effort)
 
     def _extract_via_openai(
-        self, raw_prompt: str, enable_search_grounding: bool = False
+        self,
+        raw_prompt: str,
+        enable_search_grounding: bool = False,
+        reasoning_effort: str = "low",
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
         """Extract policy using OpenAI model (e.g. GPT-6-Luna). Supports live OpenAI web search."""
         import json
@@ -153,6 +170,7 @@ class UnifiedPolicyExtractor:
             )
 
         client = OpenAI(api_key=api_key, base_url=self.openai_base_url)
+        effort = reasoning_effort if reasoning_effort in ("low", "medium", "high") else "low"
 
         # 1. Live Web Search via OpenAI Responses API (web_search)
         if enable_search_grounding:
@@ -166,7 +184,7 @@ class UnifiedPolicyExtractor:
                         + f"\n\nCRITICAL: Respond ONLY with a valid JSON object complying exactly with this schema:\n{schema_json}"
                     ),
                     tools=[{"type": "web_search_preview"}],
-                    reasoning={"effort": "low"},
+                    reasoning={"effort": effort},
                 )
                 output_text = getattr(resp, "output_text", "") or ""
                 citations: List[GroundingCitation] = []
@@ -210,7 +228,7 @@ class UnifiedPolicyExtractor:
                 )
 
         # 2. Standard Structured Completion (no web search or fallback)
-        call_kwargs = _openai_chat_kwargs(self.model_name, desired_temperature=0.1)
+        call_kwargs = _openai_chat_kwargs(self.model_name, desired_temperature=0.1, reasoning_effort=effort)
 
         try:
             completion = client.beta.chat.completions.parse(
@@ -712,6 +730,7 @@ async def simulate_policy(
         extracted_policy, extraction_mode, grounded_citations = extractor.extract_policy(
             raw_prompt=request.raw_prompt,
             enable_search_grounding=request.enable_search_grounding,
+            reasoning_effort=request.reasoning_effort or "low",
         )
 
         if request.override_parameters is not None:

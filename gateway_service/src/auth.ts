@@ -169,8 +169,8 @@ export async function parseAndVerifyToken(token: string): Promise<AuthenticatedU
         let tier: UserTier = "free";
         if (roles.includes("pro") || roles.includes("tier_pro") || roles.includes("journalist")) {
           tier = "pro";
-        } else if (roles.includes("business") || roles.includes("enterprise")) {
-          tier = "business";
+        } else if (roles.includes("business") || roles.includes("enterprise") || roles.includes("expert")) {
+          tier = "expert";
         }
 
         const user = syncExternalUser({

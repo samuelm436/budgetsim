@@ -241,6 +241,10 @@ class SimulationRequest(BaseModel):
             "Defaults to False for sub-5-second fast execution using the built-in 2027 Regierungsentwurf baseline."
         ),
     )
+    reasoning_effort: Optional[Literal["low", "medium", "high"]] = Field(
+        default="low",
+        description="Reasoning effort level for OpenAI reasoning models like GPT-6-Luna (low, medium, high).",
+    )
 
 
 class LineItemDelta(BaseModel):

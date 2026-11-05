@@ -80,19 +80,38 @@
       color: var(--text-secondary);
     }
 
-    .grounding-toggle {
-      display: flex;
+    .btn-settings-toggle {
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 0.75rem;
-      color: var(--text-muted);
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 4px;
+      padding: 4px 9px;
       cursor: pointer;
-      user-select: none;
+      font-family: var(--font-sans);
+      transition: all 0.15s ease;
     }
 
-    .grounding-toggle input {
-      accent-color: var(--accent);
-      cursor: pointer;
+    .btn-settings-toggle:hover {
+      background: #e2e8f0;
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    .pro-query-pill {
+      font-size: 0.6rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      background: #eff6ff;
+      color: var(--accent);
+      border: 1px solid #bfdbfe;
+      border-radius: 3px;
+      padding: 1px 4px;
+      text-transform: uppercase;
     }
 
     #chat-messages {
@@ -1264,7 +1283,8 @@
       color: #047857;
     }
 
-    .auth-badge.business {
+    .auth-badge.business,
+    .auth-badge.expert {
       border-color: #8b5cf6;
       background: #f5f3ff;
       color: #6d28d9;
@@ -1417,6 +1437,62 @@
       box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
     }
 
+    .btn-settings-toggle {
+      background: #ffffff;
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-settings-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f8fafc;
+    }
+    .pro-query-pill {
+      font-size: 0.62rem;
+      font-weight: 700;
+      background: #fdf4ff;
+      color: #9333ea;
+      border: 1px solid #f0abfc;
+      border-radius: 4px;
+      padding: 1px 5px;
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+    }
+    .settings-option-card {
+      border: 1px solid var(--border-light);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #ffffff;
+      cursor: pointer;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .settings-option-card:hover:not(.disabled) {
+      border-color: var(--accent);
+      background: #f8fafc;
+    }
+    .settings-option-card.selected {
+      border-color: var(--accent);
+      background: #eff6ff;
+    }
+    .settings-option-card.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      background: #f8fafc;
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -1427,10 +1503,16 @@
     <aside class="chat-panel">
       <div class="panel-header">
         <h2>Policy Simulation Console</h2>
-        <label class="grounding-toggle" title="Enable live Web Search for real-time empirical lookups.">
-          <input type="checkbox" id="chk-grounding" />
-          <span>Web Search</span>
-        </label>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn-settings-toggle" id="btn-settings-toggle" onclick="openSettingsModal()" title="Simulation Settings (Reasoning Depth & Web Search)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span>Settings</span>
+            <span id="header-pro-query-tag" class="pro-query-pill hidden">PRO</span>
+          </button>
+        </div>
       </div>
 
       <div id="chat-messages">
@@ -1464,7 +1546,7 @@
             class="btn-composer-upload"
             id="btn-upload-package"
             onclick="triggerPackageFileInput()"
-            title="Upload Reform Package (PDF, TXT, DOCX) - Business & Admin"
+            title="Upload Reform Package (PDF, TXT, DOCX) - Expert & Admin"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
@@ -1533,8 +1615,8 @@
           >
             0 Reforms Applied &rsaquo;
           </button>
-          <button class="btn-reset" onclick="resetTo2027Draft()" title="Reset to un-modified 2027 Government Draft">
-            Reset
+          <button class="btn-reset" onclick="handleNewDraftClick()" title="Start a new fiscal draft (automatically saves active draft to database)">
+            New Draft
           </button>
           <div id="account-menu-trigger-container">
             <!-- Account Menu Button populated dynamically -->
@@ -1567,6 +1649,10 @@
               <button class="popover-item" onclick="closeAccountMenu(); openSaveScenarioModal();">
                 <span>Save Current State</span>
               </button>
+              <button class="popover-item" onclick="closeAccountMenu(); openSettingsModal();" title="Configure reasoning effort and web search">
+                <span>Simulation Settings</span>
+                <span id="popover-pro-mode-label" class="pro-query-pill hidden">PRO</span>
+              </button>
               
               <!-- Admin & Testing Controls: Exclusive to Platform Administrator -->
               <div id="popover-admin-section" style="display:none;">
@@ -1581,7 +1667,7 @@
                 </button>
                 <button class="popover-item" onclick="closeAccountMenu(); openTierUpgradeModal();" title="Test different user tiers">
                   <span>Testing: Switch Tier</span>
-                  <span id="popover-switch-tier-label" style="font-size:0.7rem; color:var(--text-muted);">Business &rsaquo;</span>
+                  <span id="popover-switch-tier-label" style="font-size:0.7rem; color:var(--text-muted);">Expert &rsaquo;</span>
                 </button>
               </div>
 
@@ -1680,6 +1766,8 @@
     async function initApp() {
       try {
         await initAuth();
+        loadSettingsFromStorage();
+        initChatHistory();
         const res = await fetch("/api/diagram/state");
         const state = await res.json();
         initial2027Summary = state.initial_2027_summary || state.active_summary;
@@ -1893,8 +1981,246 @@
 
     function runPreset(text) {
       document.getElementById("chat-input").value = text;
-      document.getElementById("chat-form")?.dispatchEvent(new Event("submit"));
       handleChatSubmit(new Event("submit"));
+    }
+
+    // LocalStorage Chat Persistence
+    let chatHistoryItems = [];
+
+    function persistChatHistory() {
+      try {
+        const isGuest = !currentAuthUser;
+        const payload = {
+          saved_at: Date.now(),
+          is_guest: isGuest,
+          messages: chatHistoryItems
+        };
+        localStorage.setItem("govsim_chat_history_v1", JSON.stringify(payload));
+      } catch (err) {
+        console.warn("Failed to persist chat history:", err);
+      }
+    }
+
+    function initChatHistory() {
+      try {
+        const raw = localStorage.getItem("govsim_chat_history_v1");
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+
+        // Auto-delete after 24h (rule applies strictly to guests and stale sessions)
+        if (data.saved_at && (now - data.saved_at > oneDayMs)) {
+          localStorage.removeItem("govsim_chat_history_v1");
+          return;
+        }
+
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          chatHistoryItems = [];
+          data.messages.forEach(item => {
+            if (item.type === "user") {
+              appendUserBubble(item.text, false);
+            } else if (item.type === "proposal") {
+              appendProposalBubble(item.envelope, false);
+            } else if (item.type === "error") {
+              appendErrorBubble(item.text, false);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to restore chat history:", err);
+      }
+    }
+
+    function clearActiveChat() {
+      chatHistoryItems = [];
+      localStorage.removeItem("govsim_chat_history_v1");
+      const container = document.getElementById("chat-messages");
+      if (container) {
+        container.innerHTML = `
+          <div class="msg assistant">
+            <p>
+              <strong>2027 Federal Budget Baseline Loaded (Regierungsentwurf 2027).</strong><br />
+              Core expenditures total <strong>€555.4B</strong> against <strong>€436.7B</strong> in non-credit revenues, leaving a net borrowing requirement of <strong>€118.7B</strong>.
+            </p>
+            <p style="margin-top: 8px; color: var(--text-secondary);">
+              Describe any fiscal reform, spending reallocation, tax adjustment, or transfer program below. Review the calculated impact card and click <strong>Apply to Budget</strong> to commit changes to the vertical budget bars and comparison table.
+            </p>
+          </div>
+        `;
+      }
+    }
+
+    // ========================================================================
+    // Simulation Settings (Reasoning Depth & Web Grounding)
+    // ========================================================================
+    let currentSettings = {
+      reasoning_effort: "low",
+      enable_search_grounding: false
+    };
+
+    function loadSettingsFromStorage() {
+      try {
+        const raw = localStorage.getItem("govsim_settings_v1");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (["low", "medium", "high"].includes(parsed.reasoning_effort)) {
+            currentSettings.reasoning_effort = parsed.reasoning_effort;
+          }
+          if (typeof parsed.enable_search_grounding === "boolean") {
+            currentSettings.enable_search_grounding = parsed.enable_search_grounding;
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load settings:", err);
+      }
+      enforceTierSettingsConstraints();
+      updateSettingsUI();
+    }
+
+    function enforceTierSettingsConstraints() {
+      const tier = (currentAuthUser ? (currentAuthUser.tier || "free") : "guest").toLowerCase();
+      const isAdmin = !!(currentAuthUser && currentAuthUser.role === "admin");
+      if (!isAdmin && (tier === "guest" || tier === "free")) {
+        currentSettings.reasoning_effort = "low";
+        currentSettings.enable_search_grounding = false;
+      }
+    }
+
+    function isProQueryActive() {
+      return currentSettings.reasoning_effort === "medium" ||
+             currentSettings.reasoning_effort === "high" ||
+             Boolean(currentSettings.enable_search_grounding);
+    }
+
+    function updateSettingsUI() {
+      const isPro = isProQueryActive();
+      const headerTag = document.getElementById("header-pro-query-tag");
+      if (headerTag) {
+        if (isPro) headerTag.classList.remove("hidden");
+        else headerTag.classList.add("hidden");
+      }
+      const popoverTag = document.getElementById("popover-pro-mode-label");
+      if (popoverTag) {
+        if (isPro) popoverTag.classList.remove("hidden");
+        else popoverTag.classList.add("hidden");
+      }
+    }
+
+    function openSettingsModal() {
+      enforceTierSettingsConstraints();
+      renderSettingsModalState();
+      document.getElementById("settings-modal").classList.remove("hidden");
+    }
+
+    function closeSettingsModal() {
+      document.getElementById("settings-modal").classList.add("hidden");
+    }
+
+    function renderSettingsModalState() {
+      const tier = (currentAuthUser ? (currentAuthUser.tier || "free") : "guest").toLowerCase();
+      const isAdmin = !!(currentAuthUser && currentAuthUser.role === "admin");
+      const canUsePro = isAdmin || tier === "pro" || tier === "expert";
+
+      const cardLow = document.getElementById("card-reasoning-low");
+      const cardMed = document.getElementById("card-reasoning-medium");
+      const cardHigh = document.getElementById("card-reasoning-high");
+      const cardWeb = document.getElementById("card-web-search");
+
+      const radioLow = document.getElementById("radio-reasoning-low");
+      const radioMed = document.getElementById("radio-reasoning-medium");
+      const radioHigh = document.getElementById("radio-reasoning-high");
+      const chkWeb = document.getElementById("chk-web-search-setting");
+
+      if (radioLow) radioLow.checked = currentSettings.reasoning_effort === "low";
+      if (radioMed) radioMed.checked = currentSettings.reasoning_effort === "medium";
+      if (radioHigh) radioHigh.checked = currentSettings.reasoning_effort === "high";
+      if (chkWeb) chkWeb.checked = Boolean(currentSettings.enable_search_grounding);
+
+      [cardLow, cardMed, cardHigh].forEach(c => c && c.classList.remove("selected"));
+      if (currentSettings.reasoning_effort === "low" && cardLow) cardLow.classList.add("selected");
+      if (currentSettings.reasoning_effort === "medium" && cardMed) cardMed.classList.add("selected");
+      if (currentSettings.reasoning_effort === "high" && cardHigh) cardHigh.classList.add("selected");
+      if (chkWeb && chkWeb.checked && cardWeb) cardWeb.classList.add("selected");
+      else if (cardWeb) cardWeb.classList.remove("selected");
+
+      if (!canUsePro) {
+        if (cardMed) cardMed.className = "settings-option-card disabled";
+        if (cardHigh) cardHigh.className = "settings-option-card disabled";
+        if (cardWeb) cardWeb.className = "settings-option-card disabled";
+        if (radioMed) radioMed.disabled = true;
+        if (radioHigh) radioHigh.disabled = true;
+        if (chkWeb) chkWeb.disabled = true;
+      } else {
+        if (cardMed && cardMed.classList.contains("disabled")) cardMed.classList.remove("disabled");
+        if (cardHigh && cardHigh.classList.contains("disabled")) cardHigh.classList.remove("disabled");
+        if (cardWeb && cardWeb.classList.contains("disabled")) cardWeb.classList.remove("disabled");
+        if (radioMed) radioMed.disabled = false;
+        if (radioHigh) radioHigh.disabled = false;
+        if (chkWeb) chkWeb.disabled = false;
+      }
+
+      const modalProTag = document.getElementById("settings-pro-tag");
+      if (modalProTag) {
+        if (isProQueryActive()) modalProTag.classList.remove("hidden");
+        else modalProTag.classList.add("hidden");
+      }
+
+      const classEl = document.getElementById("settings-query-classification");
+      const quotaEl = document.getElementById("settings-quota-status-text");
+      if (isProQueryActive()) {
+        if (classEl) classEl.innerHTML = `<span style="color:#9333ea; font-weight:700;">Active Mode: Pro Query</span>`;
+        if (quotaEl) quotaEl.innerText = "Consumes 1 Pro Query from your daily quota (Medium/High reasoning or live Web Search).";
+      } else {
+        if (classEl) classEl.innerHTML = `<span style="color:var(--text-primary); font-weight:700;">Active Mode: Normal Query</span>`;
+        if (quotaEl) quotaEl.innerText = "Consumes 1 normal query from your daily quota (Low reasoning, baseline empirical data).";
+      }
+    }
+
+    function selectReasoningSetting(val) {
+      const tier = (currentAuthUser ? (currentAuthUser.tier || "free") : "guest").toLowerCase();
+      const isAdmin = !!(currentAuthUser && currentAuthUser.role === "admin");
+      if (!isAdmin && (tier === "guest" || tier === "free") && (val === "medium" || val === "high")) {
+        showLimitExceededModal({
+          code: "PRO_QUERY_RESTRICTED",
+          tier: tier,
+          message: "Pro Queries (Medium/High reasoning) require Pro or Expert tier. Upgrade to access deep reasoning depth."
+        });
+        return;
+      }
+      currentSettings.reasoning_effort = val;
+      renderSettingsModalState();
+    }
+
+    function handleWebSearchCheckboxChange(e) {
+      const tier = (currentAuthUser ? (currentAuthUser.tier || "free") : "guest").toLowerCase();
+      const isAdmin = !!(currentAuthUser && currentAuthUser.role === "admin");
+      if (!isAdmin && (tier === "guest" || tier === "free") && e.target.checked) {
+        e.target.checked = false;
+        showLimitExceededModal({
+          code: "PRO_QUERY_RESTRICTED",
+          tier: tier,
+          message: "Web Search Grounding requires Pro or Expert tier. Upgrade to access live web search grounding."
+        });
+        return;
+      }
+      currentSettings.enable_search_grounding = e.target.checked;
+      renderSettingsModalState();
+    }
+
+    function toggleWebSearchSetting(event) {
+      if (event.target.id === "chk-web-search-setting") return;
+      const chk = document.getElementById("chk-web-search-setting");
+      if (chk) {
+        chk.checked = !chk.checked;
+        handleWebSearchCheckboxChange({ target: chk });
+      }
+    }
+
+    function applySettingsModal() {
+      localStorage.setItem("govsim_settings_v1", JSON.stringify(currentSettings));
+      updateSettingsUI();
+      closeSettingsModal();
     }
 
     async function handleChatSubmit(e) {
@@ -1910,7 +2236,6 @@
       sendBtn.disabled = true;
       sendBtn.innerText = "Simulating...";
 
-      const enableGrounding = document.getElementById("chk-grounding").checked;
       const headers = { "Content-Type": "application/json" };
       const token = localStorage.getItem("govsim_auth_token");
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -1922,15 +2247,16 @@
           body: JSON.stringify({
             raw_prompt: prompt,
             build_on_active_diagram: true,
-            enable_search_grounding: enableGrounding
+            reasoning_effort: currentSettings.reasoning_effort,
+            enable_search_grounding: currentSettings.enable_search_grounding
           })
         });
 
         const data = await res.json();
         if (!res.ok) {
-          if (res.status === 429 || data?.error?.code === "TIER_LIMIT_REACHED") {
+          if (res.status === 429 || res.status === 403 || data?.error?.code === "TIER_LIMIT_REACHED" || data?.error?.code === "PRO_QUERY_RESTRICTED") {
             showLimitExceededModal(data.error);
-            appendErrorBubble(`Limit Reached: ${data.error.message}`);
+            appendErrorBubble(`Limit: ${data.error?.message || res.statusText}`);
             return;
           }
           const errDetail = data?.error?.details?.detail || data?.error?.message || `HTTP ${res.status}`;
@@ -1961,14 +2287,14 @@
       }
       const tier = (currentAuthUser.tier || "free").toLowerCase();
       const role = (currentAuthUser.role || "user").toLowerCase();
-      if (tier !== "business" && role !== "admin") {
+      if (tier !== "expert" && role !== "admin") {
         const modal = document.getElementById("limit-modal");
         const titleEl = document.getElementById("limit-modal-title");
         const descEl = document.getElementById("limit-modal-desc");
         const actionBtn = document.getElementById("btn-limit-action");
-        titleEl.innerText = "Business Tier Required";
-        descEl.innerText = "Uploading comprehensive reform packages (PDF, TXT, DOCX) is exclusively available for Business tier and Administrator accounts. Please upgrade to incorporate multi-page legislative proposals.";
-        actionBtn.innerText = "Upgrade to Business Tier";
+        titleEl.innerText = "Expert Tier Required";
+        descEl.innerText = "Uploading comprehensive reform packages (PDF, TXT, DOCX) is exclusively available for Expert tier and Administrator accounts. Please upgrade to incorporate multi-page legislative proposals.";
+        actionBtn.innerText = "Upgrade to Expert Tier";
         actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
         modal.classList.remove("hidden");
         return;
@@ -2006,7 +2332,6 @@
       }
       if (uploadBtn) uploadBtn.disabled = true;
 
-      const enableGrounding = document.getElementById("chk-grounding").checked;
       const headers = { "Content-Type": "application/json" };
       const token = localStorage.getItem("govsim_auth_token");
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -2030,15 +2355,16 @@
             filename: file.name,
             content_base64: base64Content,
             build_on_active_diagram: true,
-            enable_search_grounding: enableGrounding
+            reasoning_effort: currentSettings.reasoning_effort,
+            enable_search_grounding: currentSettings.enable_search_grounding
           })
         });
 
         const data = await res.json();
         if (!res.ok) {
-          if (res.status === 429 || data?.error?.code === "TIER_LIMIT_REACHED") {
+          if (res.status === 429 || res.status === 403 || data?.error?.code === "TIER_LIMIT_REACHED" || data?.error?.code === "PRO_QUERY_RESTRICTED") {
             showLimitExceededModal(data.error);
-            appendErrorBubble(`Limit Reached: ${data.error.message}`);
+            appendErrorBubble(`Limit: ${data.error?.message || res.statusText}`);
             return;
           }
           const errDetail = data?.error?.details?.detail || data?.error?.message || `HTTP ${res.status}`;
@@ -2065,24 +2391,44 @@
       }
     }
 
-    function appendUserBubble(text) {
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function appendUserBubble(text, saveToHistory = true) {
       const container = document.getElementById("chat-messages");
       const div = document.createElement("div");
       div.className = "msg user";
       div.innerText = text;
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
+
+      if (saveToHistory) {
+        chatHistoryItems.push({ type: "user", text });
+        persistChatHistory();
+      }
     }
 
-    function appendErrorBubble(errText) {
+    function appendErrorBubble(errText, saveToHistory = true) {
       const container = document.getElementById("chat-messages");
       const div = document.createElement("div");
       div.className = "msg assistant";
       div.style.borderColor = "#fca5a5";
       div.style.background = "#fef2f2";
-      div.innerHTML = `<p style="color:#b91c1c; font-weight:600;">Simulation Error</p><p style="color:#7f1d1d; font-size:0.8rem; margin-top:4px;">${errText}</p>`;
+      div.innerHTML = `<p style="color:#b91c1c; font-weight:600;">Simulation Error</p><p style="color:#7f1d1d; font-size:0.8rem; margin-top:4px;">${escapeHtml(errText)}</p>`;
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
+
+      if (saveToHistory) {
+        chatHistoryItems.push({ type: "error", text: errText });
+        persistChatHistory();
+      }
     }
 
     function formatModelShortBadge(modelId) {
@@ -2093,7 +2439,7 @@
       return modelId;
     }
 
-    function appendProposalBubble(envelope) {
+    function appendProposalBubble(envelope, saveToHistory = true) {
       const container = document.getElementById("chat-messages");
       const div = document.createElement("div");
       div.className = "msg assistant";
@@ -2108,7 +2454,7 @@
         const isGood = (item.side === "revenue" && item.delta_bn > 0) || (item.side === "expenditure" && item.delta_bn < 0);
         linesHtml += `
           <div class="calc-delta-line">
-            <span class="calc-delta-name">${item.display_name} (${item.baseline_bn.toFixed(1)}B &rarr; ${item.proposed_bn.toFixed(1)}B)</span>
+            <span class="calc-delta-name">${escapeHtml(item.display_name)} (${item.baseline_bn.toFixed(1)}B &rarr; ${item.proposed_bn.toFixed(1)}B)</span>
             <span class="calc-delta-num ${isGood ? 'val-pos' : 'val-neg'}">${formatSignedBn(item.delta_bn)}</span>
           </div>
         `;
@@ -2117,8 +2463,6 @@
       const secTime = (envelope.execution_time_ms / 1000).toFixed(1);
       const rawModel = envelope.model_used || envelope.simulation?.metadata?.model_used || currentActiveModelId;
       const modelBadge = formatModelShortBadge(rawModel);
-      const extractionMode = envelope.simulation?.metadata?.extraction_mode || "";
-      const hasWebSearch = extractionMode.includes("WEB_SEARCH") || extractionMode.includes("GROUNDED") || Boolean(envelope.simulation?.metadata?.citations?.length);
 
       let citationsHtml = "";
       const citations = envelope.simulation?.metadata?.citations || [];
@@ -2131,19 +2475,21 @@
             </button>
             <div id="sources-list-${card.proposal_id}" class="hidden" style="margin-top:6px; padding:8px 10px; background:#f8fafc; border:1px solid var(--border-light); border-radius:5px; font-size:0.73rem;">
               <ul style="margin:0; padding-left:16px; color:var(--text-muted); line-height:1.4;">
-                ${citations.map(c => `<li style="margin-bottom:3px;"><a href="${c.uri}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:underline;">${c.title || c.uri}</a></li>`).join("")}
+                ${citations.map(c => `<li style="margin-bottom:3px;"><a href="${escapeHtml(c.uri)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:underline;">${escapeHtml(c.title || c.uri)}</a></li>`).join("")}
               </ul>
             </div>
           </div>
         `;
       }
 
+      const isAlreadyApplied = currentAppliedProposals && currentAppliedProposals.some(p => p.proposal_id === card.proposal_id);
+
       div.innerHTML = `
         <p>${envelope.chat_reply.feedback_text}</p>
         <div class="calc-card">
           <div class="calc-card-header">
-            <span class="calc-card-title">${card.title}</span>
-            <span class="calc-domain-tag">${card.policy_domain.replace(/_/g, " ")}</span>
+            <span class="calc-card-title">${escapeHtml(card.title)}</span>
+            <span class="calc-domain-tag">${escapeHtml(card.policy_domain.replace(/_/g, " "))}</span>
           </div>
           <div class="calc-summary-row">
             <div class="calc-stat">
@@ -2163,8 +2509,8 @@
           ${citationsHtml}
           <div class="calc-card-actions">
             <span class="exec-latency">${secTime}s &bull; ${modelBadge}</span>
-            <button class="btn-apply" id="btn-apply-${card.proposal_id}" onclick="applyProposalToBudget('${card.proposal_id}')">
-              Apply to Budget &rarr;
+            <button class="btn-apply ${isAlreadyApplied ? 'applied' : ''}" id="btn-apply-${card.proposal_id}" onclick="${isAlreadyApplied ? '' : `applyProposalToBudget('${card.proposal_id}')`}">
+              ${isAlreadyApplied ? "Applied to 2027 Budget" : "Apply to Budget &rarr;"}
             </button>
           </div>
         </div>
@@ -2172,6 +2518,11 @@
 
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
+
+      if (saveToHistory) {
+        chatHistoryItems.push({ type: "proposal", envelope });
+        persistChatHistory();
+      }
     }
 
     function toggleSourcesList(proposalId) {
@@ -2218,6 +2569,44 @@
           btn.innerText = "Retry Apply";
         }
       }
+    }
+
+    async function handleNewDraftClick() {
+      // If signed-in user has applied proposals, automatically save the current draft
+      if (currentAuthUser && currentAppliedProposals && currentAppliedProposals.length > 0) {
+        try {
+          const draftDate = new Date();
+          const timeStr = draftDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const dateStr = draftDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          const firstTitle = currentAppliedProposals[0]?.title || "Custom Reforms";
+          const autoTitle = `Draft: ${firstTitle} (${currentAppliedProposals.length} reform${currentAppliedProposals.length === 1 ? '' : 's'}, ${dateStr} ${timeStr})`;
+
+          const token = localStorage.getItem("govsim_auth_token");
+          await fetch("/api/scenarios/saves", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              title: autoTitle,
+              description: `Automatically saved before starting a new draft. Contains ${currentAppliedProposals.length} policy changes.`
+            })
+          });
+          await refreshScenariosCount();
+        } catch (saveErr) {
+          console.warn("Auto-saving draft before reset failed:", saveErr);
+        }
+      }
+
+      await resetTo2027Draft();
+      activeScenarioId = null;
+      const tag = document.getElementById("active-scenario-tag");
+      if (tag) {
+        tag.innerText = "Government Draft (Baseline)";
+        tag.title = "Active Fiscal Scenario";
+      }
+      clearActiveChat();
     }
 
     async function resetTo2027Draft() {
@@ -2367,14 +2756,22 @@
         btn.innerHTML = `<span>Assessing Macro Dynamics...</span>`;
       }
 
+      const headers = { "Content-Type": "application/json" };
+      const token = localStorage.getItem("govsim_auth_token");
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       try {
         const res = await fetch("/api/packages/assess", {
           method: "POST",
-          headers: { "Content-Type": "application/json" }
+          headers
         });
 
         if (!res.ok) {
           const err = await res.json();
+          if (res.status === 429 || err?.error?.code === "TIER_LIMIT_REACHED") {
+            showLimitExceededModal(err.error);
+            return;
+          }
           alert(`Macro assessment failed: ${err?.error?.message || res.statusText}`);
           return;
         }
@@ -2382,6 +2779,7 @@
         const assessment = await res.json();
         lastMacroAssessment = assessment;
         renderMacroAssessment(assessment);
+        await refreshAuthMe();
       } catch (err) {
         console.error("Failed to execute macroeconomic assessment:", err);
         alert(`Failed to execute macroeconomic assessment: ${err.message}`);
@@ -2762,9 +3160,12 @@
         demoLoginsSection.style.display = isAdmin ? "block" : "none";
       }
 
+      enforceTierSettingsConstraints();
+      updateSettingsUI();
+
       if (authData.authenticated && authData.user) {
         const u = authData.user;
-        const tier = u.tier || "free";
+        const tier = (u.tier || "free").toLowerCase();
         const usage = authData.usage || { remaining: 10, max_limit: 10, current_count: 0 };
         const initial = (u.name || u.email).slice(0, 1).toUpperCase();
 
@@ -2772,7 +3173,7 @@
           triggerContainer.innerHTML = `
             <button class="btn-account-pill" onclick="toggleAccountMenu(event)" title="Open Account Menu">
               <span class="avatar-circle" style="${isAdmin ? 'background:linear-gradient(135deg, #7c3aed, #4f46e5);' : ''}">${initial}</span>
-              <span>${u.name}</span>
+              <span>${escapeHtml(u.name)}</span>
               ${isAdmin ? '<span style="font-size:0.6rem; background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe; padding:1px 5px; border-radius:3px; font-weight:700;">ADMIN</span>' : ''}
               <span style="font-size:0.65rem; color:var(--text-muted);">&#9662;</span>
             </button>
@@ -2787,20 +3188,52 @@
             tierPill.style.background = "#f5f3ff";
             tierPill.style.color = "#7c3aed";
             tierPill.style.border = "1px solid #ddd6fe";
+          } else if (tier === "expert") {
+            tierPill.style.background = "#f5f3ff";
+            tierPill.style.color = "#6d28d9";
+            tierPill.style.border = "1px solid #ddd6fe";
+          } else if (tier === "pro") {
+            tierPill.style.background = "#ecfdf5";
+            tierPill.style.color = "#047857";
+            tierPill.style.border = "1px solid #a7f3d0";
+          } else {
+            tierPill.style.background = "#f1f5f9";
+            tierPill.style.color = "#475569";
+            tierPill.style.border = "1px solid #cbd5e1";
           }
         }
         if (switchTierLabel) switchTierLabel.innerText = `${tier.toUpperCase()} ›`;
 
-        const pct = isAdmin ? 100 : Math.min(100, Math.max(0, (usage.remaining / Math.max(1, usage.max_limit)) * 100));
-        if (quotaFill) quotaFill.style.width = `${pct}%`;
-        if (quotaText) quotaText.innerText = isAdmin ? "Unlimited (Administrator Access)" : `${usage.remaining} / ${usage.max_limit} left today`;
+        if (isAdmin) {
+          if (quotaFill) quotaFill.style.width = "100%";
+          if (quotaText) quotaText.innerText = "Unlimited (Administrator Access)";
+        } else if (tier === "expert") {
+          const proRem = usage.pro_queries_remaining !== undefined ? usage.pro_queries_remaining : 100;
+          const pct = Math.min(100, Math.max(0, (proRem / 100) * 100));
+          if (quotaFill) quotaFill.style.width = `${pct}%`;
+          if (quotaText) quotaText.innerText = `${proRem} / 100 Pro left · Unlimited Normal`;
+        } else if (tier === "pro") {
+          const proRem = usage.pro_queries_remaining !== undefined ? usage.pro_queries_remaining : 20;
+          const normRem = usage.normal_queries_remaining !== undefined ? usage.normal_queries_remaining : 80;
+          const totalRem = proRem + normRem;
+          const pct = Math.min(100, Math.max(0, (totalRem / 100) * 100));
+          if (quotaFill) quotaFill.style.width = `${pct}%`;
+          if (quotaText) quotaText.innerText = `${proRem} / 20 Pro · ${normRem} / 80 Normal left`;
+        } else {
+          // Free tier
+          const normRem = usage.normal_queries_remaining !== undefined ? usage.normal_queries_remaining : (usage.remaining !== undefined ? usage.remaining : 10);
+          const pct = Math.min(100, Math.max(0, (normRem / 10) * 100));
+          if (quotaFill) quotaFill.style.width = `${pct}%`;
+          if (quotaText) quotaText.innerText = `${normRem} / 10 Normal queries left`;
+        }
 
         if (authBtn) {
           authBtn.innerText = "Sign Out";
           authBtn.className = "popover-item danger";
         }
       } else {
-        const usage = authData.usage || { remaining: 1, max_limit: 1, current_count: 0 };
+        const usage = authData.usage || { remaining: 3, max_limit: 3, current_count: 0 };
+        const normRem = usage.normal_queries_remaining !== undefined ? usage.normal_queries_remaining : (usage.remaining !== undefined ? usage.remaining : 3);
 
         if (triggerContainer) {
           triggerContainer.innerHTML = `
@@ -2816,12 +3249,15 @@
         if (emailEl) emailEl.innerText = "Anonymous Session";
         if (tierPill) {
           tierPill.innerText = "GUEST";
+          tierPill.style.background = "#fffbeb";
+          tierPill.style.color = "#b45309";
+          tierPill.style.border = "1px solid #fde68a";
         }
         if (switchTierLabel) switchTierLabel.innerText = "Free / Pro ›";
 
-        const pct = usage.remaining > 0 ? 100 : 0;
+        const pct = Math.min(100, Math.max(0, (normRem / 3) * 100));
         if (quotaFill) quotaFill.style.width = `${pct}%`;
-        if (quotaText) quotaText.innerText = `${usage.remaining} / 1 simulation left`;
+        if (quotaText) quotaText.innerText = `${normRem} / 3 daily simulations left`;
 
         if (authBtn) {
           authBtn.innerText = "Sign In / Register";
@@ -2920,7 +3356,9 @@
       localStorage.removeItem("govsim_auth_token");
       currentAuthUser = null;
       activeScenarioId = null;
-      document.getElementById("active-scenario-tag").innerText = "Baseline 2027 Draft";
+      document.getElementById("active-scenario-tag").innerText = "Government Draft (Baseline)";
+      enforceTierSettingsConstraints();
+      updateSettingsUI();
       refreshAuthMe();
     }
 
@@ -3041,25 +3479,33 @@
         scenarios.forEach(s => {
           const dateStr = new Date(s.updated_at).toLocaleDateString() + " " + new Date(s.updated_at).toLocaleTimeString();
           const isActive = s.id === activeScenarioId;
+          const canRevisit = s.can_revisit !== false;
 
           html += `
-            <div class="scenario-card-item" style="${isActive ? 'border-color:var(--accent); background:#f8fafc;' : ''}">
+            <div class="scenario-card-item" style="${isActive ? 'border-color:var(--accent); background:#f8fafc;' : ''}${!canRevisit ? 'opacity:0.8;' : ''}">
               <div style="flex:1;">
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="font-size:0.92rem; font-weight:700; color:var(--text-primary);">${s.title}</span>
+                  <span style="font-size:0.92rem; font-weight:700; color:var(--text-primary);">${escapeHtml(s.title)}</span>
                   ${isActive ? `<span class="calc-domain-tag" style="background:#dbeafe; color:#1e40af;">ACTIVE</span>` : ''}
+                  ${!canRevisit ? `<span class="calc-domain-tag" style="background:#fef2f2; color:#b91c1c; border-color:#fca5a5;">ARCHIVED (FREE LIMIT)</span>` : ''}
                 </div>
                 <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:3px;">
-                  ${s.description || 'No notes added'}
+                  ${escapeHtml(s.description || 'No notes added')}
                 </div>
                 <div style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); margin-top:4px;">
                   ${s.applied_reforms_count} reform(s) &bull; Last updated: ${dateStr}
                 </div>
               </div>
               <div style="display:flex; gap:6px; align-items:center;">
-                <button class="btn-auth btn-auth-primary" onclick="loadSavedScenario('${s.id}')" title="Load into active workspace">
-                  Load
-                </button>
+                ${canRevisit ? `
+                  <button class="btn-auth btn-auth-primary" onclick="loadSavedScenario('${s.id}')" title="Load into active workspace">
+                    Load
+                  </button>
+                ` : `
+                  <button class="btn-auth btn-auth-secondary" style="color:#b91c1c; border-color:#fca5a5; font-size:0.72rem;" onclick="closeMyScenariosModal(); openTierUpgradeModal();" title="Free tier is limited to revisiting the 5 most recent drafts. Upgrade to revisit.">
+                    Upgrade to Revisit
+                  </button>
+                `}
                 <button class="btn-auth btn-auth-secondary" onclick="overwriteSavedScenario('${s.id}')" title="Overwrite with currently active budget">
                   Update
                 </button>
@@ -3168,16 +3614,44 @@
       const descEl = document.getElementById("limit-modal-desc");
       const actionBtn = document.getElementById("btn-limit-action");
 
-      const tier = errorInfo?.tier || "guest";
-      if (tier === "guest") {
-        titleEl.innerText = "Guest Preview Limit Reached (1/1 Simulation)";
-        descEl.innerText = "You have used your 1 free simulation as a guest. Create a free account in 5 seconds to unlock 10 simulations every day, or upgrade to Pro for 250 daily simulations and cloud-saved scenarios!";
+      const code = errorInfo?.code || "";
+      const tier = errorInfo?.tier || (currentAuthUser ? currentAuthUser.tier : "guest");
+      const quotaType = errorInfo?.quota_type || "";
+
+      if (code === "PRO_QUERY_RESTRICTED") {
+        titleEl.innerText = "Pro Query Restricted";
+        descEl.innerText = "Queries with Medium/High reasoning depth or live Web Search grounding require a Pro or Expert account. Upgrade your tier to activate deep reasoning and empirical web search, or select Low Reasoning in Settings.";
+        actionBtn.innerText = "Upgrade to Pro Tier";
+        actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
+      } else if (code === "DRAFT_HISTORY_LIMIT") {
+        titleEl.innerText = "Draft Archive Limit Reached";
+        descEl.innerText = errorInfo?.message || "Free accounts can only revisit their 5 most recent drafts. Upgrade to Pro or Expert to access your complete history of saved fiscal scenarios.";
+        actionBtn.innerText = "Upgrade to Revisit All";
+        actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
+      } else if (tier === "guest") {
+        titleEl.innerText = "Guest Daily Limit Reached (3 Queries/Day)";
+        descEl.innerText = "You have used your 3 free queries for today as a guest. Create a free account in 5 seconds to unlock 10 queries every day, draft auto-saving, and full fiscal comparisons!";
         actionBtn.innerText = "Register Free Account (10/Day)";
         actionBtn.onclick = () => { closeLimitModal(); openAuthModal('register'); };
-      } else {
-        titleEl.innerText = `Daily Limit Reached (${errorInfo?.max_limit || 10}/${errorInfo?.max_limit || 10})`;
-        descEl.innerText = `You have reached your daily simulation limit. Your quota resets at 00:00 UTC (in ~${errorInfo?.reset_in_hours || 8} hours). Upgrade to Pro for 250 simulations/day or Business for unlimited access!`;
+      } else if (quotaType === "pro") {
+        titleEl.innerText = `Daily Pro Quota Reached (${errorInfo?.daily_pro_queries || 20}/${errorInfo?.daily_pro_queries || 20})`;
+        descEl.innerText = "You have reached your daily allowance of Pro Queries. You can switch to Low Reasoning and disable Web Search in Settings to use your remaining Normal Queries, or upgrade to Expert for 100 Pro Queries/day and unlimited Normal Queries!";
+        actionBtn.innerText = "Upgrade to Expert Tier";
+        actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
+      } else if (tier === "free") {
+        titleEl.innerText = "Daily Quota Reached (10/10 Queries)";
+        descEl.innerText = `You have reached your free tier limit of 10 daily queries. Quotas reset at 00:00 UTC (in ~${errorInfo?.reset_in_hours || 8} hours). Upgrade to Pro for 20 Pro Queries and 80 Normal Queries every day!`;
         actionBtn.innerText = "Upgrade to Pro Tier";
+        actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
+      } else if (tier === "pro") {
+        titleEl.innerText = "Daily Quota Reached (100/100 Queries)";
+        descEl.innerText = `You have used your daily quota (20 Pro Queries and 80 Normal Queries). Upgrade to Expert for 100 Pro Queries and unlimited Normal Queries!`;
+        actionBtn.innerText = "Upgrade to Expert Tier";
+        actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
+      } else {
+        titleEl.innerText = "Daily Limit Reached";
+        descEl.innerText = errorInfo?.message || `You have reached your daily simulation limit. Quotas reset at 00:00 UTC (in ~${errorInfo?.reset_in_hours || 8} hours).`;
+        actionBtn.innerText = "Upgrade Tier";
         actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
       }
 
@@ -3498,11 +3972,11 @@
 
   <!-- Modal Dialog: Test Tier Switcher -->
   <div id="upgrade-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'upgrade-modal') closeTierUpgradeModal()">
-    <div class="modal-window" style="max-width: 520px;">
+    <div class="modal-window" style="max-width: 540px;">
       <div class="modal-header">
         <div>
           <div class="modal-header-title">Switch / Test Account Tier</div>
-          <div class="modal-header-sub">Test limit enforcement and multi-scenario features across tiers</div>
+          <div class="modal-header-sub">Test limit enforcement, Pro Queries, and multi-scenario draft features</div>
         </div>
         <button class="btn-modal-close" onclick="closeTierUpgradeModal()">&times;</button>
       </div>
@@ -3510,23 +3984,122 @@
         <div class="scenario-card-item">
           <div>
             <div style="font-weight:700; color:var(--text-primary);">Free Tier</div>
-            <div style="font-size:0.75rem; color:var(--text-secondary);">10 simulations/day &bull; Up to 10 saved scenarios</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">10 Normal Queries/day &bull; Everything is saved &bull; Last 5 drafts can be revisited</div>
           </div>
           <button class="btn-auth btn-auth-secondary" onclick="switchTierTest('free')">Select Free</button>
         </div>
         <div class="scenario-card-item" style="border-color:#a7f3d0; background:#f0fdf4;">
           <div>
-            <div style="font-weight:700; color:var(--positive);">Pro Tier (Journalists / Policy Analysts)</div>
-            <div style="font-size:0.75rem; color:var(--text-secondary);">250 simulations/day &bull; 100 cloud saves &bull; Macro dynamic audit</div>
+            <div style="font-weight:700; color:var(--positive);">Pro Tier (Policy Analysts & Journalists)</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">20 Pro Queries/day + 80 Normal Queries/day (100 total) &bull; Medium/High Reasoning & Web Search &bull; Every draft can be revisited</div>
           </div>
           <button class="btn-auth btn-auth-primary" style="background:var(--positive); border-color:var(--positive);" onclick="switchTierTest('pro')">Select Pro</button>
         </div>
         <div class="scenario-card-item" style="border-color:#ddd6fe; background:#faf5ff;">
           <div>
-            <div style="font-weight:700; color:#6d28d9;">Business / Enterprise Tier</div>
-            <div style="font-size:0.75rem; color:var(--text-secondary);">1,000 simulations/day &bull; Unlimited saves &bull; Team sharing</div>
+            <div style="font-weight:700; color:#6d28d9;">Expert Tier</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">100 Pro Queries/day + Unlimited Normal Queries &bull; Document Package Upload (PDF, TXT, DOCX) &bull; Every draft can be revisited</div>
           </div>
-          <button class="btn-auth btn-auth-primary" style="background:#6d28d9; border-color:#6d28d9;" onclick="switchTierTest('business')">Select Business</button>
+          <button class="btn-auth btn-auth-primary" style="background:#6d28d9; border-color:#6d28d9;" onclick="switchTierTest('expert')">Select Expert</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: Simulation Settings (Reasoning Effort & Web Search) -->
+  <div id="settings-modal" class="modal-overlay hidden" onclick="if(event.target.id === 'settings-modal') closeSettingsModal()">
+    <div class="modal-window" style="max-width: 500px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-header-title" style="display:flex; align-items:center; gap:8px;">
+            <span>Simulation Settings</span>
+            <span id="settings-pro-tag" class="pro-query-pill hidden">PRO QUERY</span>
+          </div>
+          <div class="modal-header-sub">Configure reasoning depth and live Web Search grounding for policy analysis</div>
+        </div>
+        <button class="btn-modal-close" onclick="closeSettingsModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="background:#ffffff; display:flex; flex-direction:column; gap:16px;">
+        <!-- Reasoning Effort Section -->
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label class="auth-form-label" style="margin-bottom:0; font-size:0.8rem; font-weight:700;">Reasoning Effort</label>
+            <span id="reasoning-tier-note" style="font-size:0.7rem; color:var(--text-muted);">Pro &amp; Expert tiers unlock Medium and High</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <label class="settings-option-card" id="card-reasoning-low" onclick="selectReasoningSetting('low')">
+              <input type="radio" name="settings_reasoning" id="radio-reasoning-low" value="low" checked style="margin-top:2px;" />
+              <div style="flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Low Reasoning</span>
+                  <span style="font-size:0.65rem; background:#f1f5f9; color:#475569; padding:1px 5px; border-radius:3px;">Normal Query</span>
+                </div>
+                <div style="font-size:0.73rem; color:var(--text-secondary); margin-top:2px;">
+                  Fastest response latency. Default for all tiers. Ideal for standard single and multi-measure reforms.
+                </div>
+              </div>
+            </label>
+
+            <label class="settings-option-card" id="card-reasoning-medium" onclick="selectReasoningSetting('medium')">
+              <input type="radio" name="settings_reasoning" id="radio-reasoning-medium" value="medium" style="margin-top:2px;" />
+              <div style="flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Medium Reasoning</span>
+                  <span class="pro-query-pill">PRO QUERY</span>
+                </div>
+                <div style="font-size:0.73rem; color:var(--text-secondary); margin-top:2px;">
+                  Balanced deep thinking. Thorough extraction for multi-department budgets and complex trade-offs.
+                </div>
+              </div>
+            </label>
+
+            <label class="settings-option-card" id="card-reasoning-high" onclick="selectReasoningSetting('high')">
+              <input type="radio" name="settings_reasoning" id="radio-reasoning-high" value="high" style="margin-top:2px;" />
+              <div style="flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">High Reasoning</span>
+                  <span class="pro-query-pill">PRO QUERY</span>
+                </div>
+                <div style="font-size:0.73rem; color:var(--text-secondary); margin-top:2px;">
+                  Maximum reasoning depth. Rigorous validation of massive legislative packages and full-scale reform programs.
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Web Search Section -->
+        <div style="border-top:1px solid var(--border-light); padding-top:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label class="auth-form-label" style="margin-bottom:0; font-size:0.8rem; font-weight:700;">Live Web Grounding</label>
+            <span class="pro-query-pill">PRO QUERY</span>
+          </div>
+          <label class="settings-option-card" id="card-web-search" onclick="toggleWebSearchSetting(event)">
+            <input type="checkbox" id="chk-web-search-setting" style="margin-top:2px;" onchange="handleWebSearchCheckboxChange(event)" />
+            <div style="flex:1;">
+              <div style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Enable Web Search Grounding</div>
+              <div style="font-size:0.73rem; color:var(--text-secondary); margin-top:2px;">
+                Empirically retrieve official statistics, current year estimates, and benchmark studies via live web search.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <!-- Status & Explanation Box -->
+        <div id="settings-status-box" style="background:#f8fafc; border:1px solid var(--border-light); border-radius:6px; padding:10px 12px; font-size:0.75rem; color:var(--text-secondary);">
+          <div style="font-weight:600; color:var(--text-primary); margin-bottom:2px;" id="settings-query-classification">
+            Active Mode: Normal Query
+          </div>
+          <div id="settings-quota-status-text">
+            Standard queries consume 1 normal query from your daily quota.
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn-auth btn-auth-secondary" onclick="closeSettingsModal()">Close</button>
+          <button type="button" class="btn-submit" style="padding:7px 18px; border-radius:5px;" onclick="applySettingsModal()">
+            Save Settings
+          </button>
         </div>
       </div>
     </div>

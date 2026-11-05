@@ -30,6 +30,7 @@ import {
   setSetting,
   UserRecord,
   UserTier,
+  normalizeTier,
   TIER_LIMITS,
 } from "./db";
 import {
@@ -94,6 +95,7 @@ export interface ScenarioRunRequest {
   build_on_active_diagram?: boolean;
   override_parameters?: PolicyParameters;
   enable_search_grounding?: boolean;
+  reasoning_effort?: "low" | "medium" | "high";
 }
 
 export interface FiscalSummary {
@@ -413,6 +415,11 @@ function validateScenarioRequest(body: unknown): ScenarioRunRequest {
     );
   }
 
+  const reasoningEffort =
+    candidate.reasoning_effort === "medium" || candidate.reasoning_effort === "high"
+      ? (candidate.reasoning_effort as "medium" | "high")
+      : "low";
+
   return {
     raw_prompt: rawPrompt.trim(),
     country_code: "DE",
@@ -428,6 +435,7 @@ function validateScenarioRequest(body: unknown): ScenarioRunRequest {
       typeof candidate.enable_search_grounding === "boolean"
         ? candidate.enable_search_grounding
         : false,
+    reasoning_effort: reasoningEffort,
   };
 }
 
@@ -524,15 +532,42 @@ async function handleProposeScenario(
   const tier: UserTier = user ? user.tier : "guest";
   const identifier = request.clientIdentifier || "guest_ip:127.0.0.1";
 
-  const usageCheck = checkAndIncrementUsage(identifier, tier);
+  await ensureInitialBudgetLoaded();
+  const validatedPayload = validateScenarioRequest(request.body);
+
+  const isProQuery =
+    validatedPayload.reasoning_effort === "medium" ||
+    validatedPayload.reasoning_effort === "high" ||
+    Boolean(validatedPayload.enable_search_grounding);
+
+  if (isProQuery && (tier === "guest" || tier === "free")) {
+    return reply.status(403).send({
+      error: {
+        code: "PRO_QUERY_RESTRICTED",
+        message:
+          "Pro queries (Medium/High reasoning or Web Search) require a Pro or Expert account. Please switch to Low reasoning without Web Search in Settings or upgrade your account.",
+        tier,
+      },
+    });
+  }
+
+  const usageCheck = checkAndIncrementUsage(identifier, tier, isProQuery, 1);
   if (!usageCheck.allowed) {
     return reply.status(429).send({
       error: {
         code: "TIER_LIMIT_REACHED",
         message: usageCheck.message,
         tier: usageCheck.tier,
+        is_pro_query: usageCheck.is_pro_query,
         current_count: usageCheck.current_count,
         max_limit: usageCheck.max_limit,
+        pro_queries_used: usageCheck.pro_queries_used,
+        pro_queries_max: usageCheck.pro_queries_max,
+        pro_queries_remaining: usageCheck.pro_queries_remaining,
+        normal_queries_used: usageCheck.normal_queries_used,
+        normal_queries_max: usageCheck.normal_queries_max,
+        normal_queries_remaining: usageCheck.normal_queries_remaining,
+        remaining: usageCheck.remaining,
         reset_in_hours: usageCheck.reset_in_hours,
       },
     });
@@ -542,9 +577,6 @@ async function handleProposeScenario(
   reply.header("X-GovSim-Tier", usageCheck.tier);
   reply.header("X-GovSim-Queries-Remaining", usageCheck.remaining.toString());
   reply.header("X-GovSim-Queries-Limit", usageCheck.max_limit.toString());
-
-  await ensureInitialBudgetLoaded();
-  const validatedPayload = validateScenarioRequest(request.body);
 
   const currentBaselineOverride =
     validatedPayload.build_on_active_diagram &&
@@ -574,6 +606,7 @@ async function handleProposeScenario(
         current_baseline_override: currentBaselineOverride,
         override_parameters: validatedPayload.override_parameters,
         enable_search_grounding: validatedPayload.enable_search_grounding,
+        reasoning_effort: validatedPayload.reasoning_effort || "low",
       }),
       signal: controller.signal,
     });
@@ -639,8 +672,15 @@ async function handleProposeScenario(
     simulation: simulationResult,
     usage: {
       tier: usageCheck.tier,
+      is_pro_query: usageCheck.is_pro_query,
       current_count: usageCheck.current_count,
       max_limit: usageCheck.max_limit,
+      pro_queries_used: usageCheck.pro_queries_used,
+      pro_queries_max: usageCheck.pro_queries_max,
+      pro_queries_remaining: usageCheck.pro_queries_remaining,
+      normal_queries_used: usageCheck.normal_queries_used,
+      normal_queries_max: usageCheck.normal_queries_max,
+      normal_queries_remaining: usageCheck.normal_queries_remaining,
       remaining: usageCheck.remaining,
       reset_in_hours: usageCheck.reset_in_hours,
     },
@@ -662,11 +702,11 @@ server.post("/api/chat/propose", handleProposeScenario);
 server.post("/api/chat/upload-package", async (request: FastifyRequest, reply: FastifyReply) => {
   await requireAuthHook(request, reply);
   const user = request.user;
-  if (!user || (user.tier !== "business" && user.role !== "admin")) {
+  if (!user || (user.tier !== "expert" && user.role !== "admin")) {
     throw new GatewayHttpError(
       403,
       "TIER_RESTRICTED",
-      "Document package upload (PDF, TXT, DOCX) is exclusively available for Business tier and Administrators."
+      "Document package upload (PDF, TXT, DOCX) is exclusively available for Expert tier and Administrators."
     );
   }
 
@@ -716,6 +756,7 @@ server.post("/api/chat/upload-package", async (request: FastifyRequest, reply: F
     raw_prompt: policyPrompt,
     build_on_active_diagram: body.build_on_active_diagram !== false,
     enable_search_grounding: Boolean(body.enable_search_grounding),
+    reasoning_effort: body.reasoning_effort || "low",
   };
 
   return handleProposeScenario(request, reply);
@@ -910,8 +951,45 @@ server.post("/api/packages/import", async (request: FastifyRequest, reply: Fasti
  * dynamic macroeconomic feedback loops, growth multipliers, and debt yield risks.
  */
 server.post("/api/packages/assess", async (request: FastifyRequest, reply: FastifyReply) => {
-  await ensureInitialBudgetLoaded();
+  await optionalAuthHook(request, reply);
+  const user = request.user;
+  const tier: UserTier = user ? user.tier : "guest";
+  const identifier = request.clientIdentifier || "guest_ip:127.0.0.1";
+
   const body = (request.body as Record<string, unknown>) || {};
+  const isProQuery =
+    body.reasoning_effort === "medium" ||
+    body.reasoning_effort === "high" ||
+    Boolean(body.enable_search_grounding);
+
+  // Assess Queries count as 2 queries
+  const usageCheck = checkAndIncrementUsage(identifier, tier, isProQuery, 2);
+  if (!usageCheck.allowed) {
+    return reply.status(429).send({
+      error: {
+        code: "TIER_LIMIT_REACHED",
+        message: usageCheck.message,
+        tier: usageCheck.tier,
+        is_pro_query: usageCheck.is_pro_query,
+        current_count: usageCheck.current_count,
+        max_limit: usageCheck.max_limit,
+        pro_queries_used: usageCheck.pro_queries_used,
+        pro_queries_max: usageCheck.pro_queries_max,
+        pro_queries_remaining: usageCheck.pro_queries_remaining,
+        normal_queries_used: usageCheck.normal_queries_used,
+        normal_queries_max: usageCheck.normal_queries_max,
+        normal_queries_remaining: usageCheck.normal_queries_remaining,
+        remaining: usageCheck.remaining,
+        reset_in_hours: usageCheck.reset_in_hours,
+      },
+    });
+  }
+
+  reply.header("X-GovSim-Tier", usageCheck.tier);
+  reply.header("X-GovSim-Queries-Remaining", usageCheck.remaining.toString());
+  reply.header("X-GovSim-Queries-Limit", usageCheck.max_limit.toString());
+
+  await ensureInitialBudgetLoaded();
   const proposals =
     Array.isArray(body.applied_proposals) && body.applied_proposals.length > 0
       ? body.applied_proposals
@@ -958,7 +1036,8 @@ server.post("/api/packages/assess", async (request: FastifyRequest, reply: Fasti
     );
   }
 
-  const assessmentData = await upstreamRes.json();
+  const assessmentData = (await upstreamRes.json()) as any;
+  assessmentData.usage = usageCheck;
   return reply.status(200).send(assessmentData);
 });
 
@@ -1095,8 +1174,8 @@ async function authenticateWithKeycloak(email: string, password: string): Promis
     let tier: UserTier = "free";
     if (roles.includes("pro") || roles.includes("tier_pro") || roles.includes("journalist")) {
       tier = "pro";
-    } else if (roles.includes("business") || roles.includes("enterprise")) {
-      tier = "business";
+    } else if (roles.includes("business") || roles.includes("enterprise") || roles.includes("expert")) {
+      tier = "expert";
     }
 
     return syncExternalUser({
@@ -1242,8 +1321,8 @@ server.get<{ Querystring: { code?: string; error?: string } }>(
       let tier: UserTier = "free";
       if (roles.includes("pro") || roles.includes("tier_pro") || roles.includes("journalist")) {
         tier = "pro";
-      } else if (roles.includes("business") || roles.includes("enterprise")) {
-        tier = "business";
+      } else if (roles.includes("business") || roles.includes("enterprise") || roles.includes("expert")) {
+        tier = "expert";
       }
 
       const user = syncExternalUser({
@@ -1453,7 +1532,7 @@ server.get("/api/auth/me", async (request: FastifyRequest, reply: FastifyReply) 
   await optionalAuthHook(request, reply);
   const user = request.user;
   const is_admin = user ? (user.role === "admin" || isAdminEmail(user.email)) : false;
-  const tier: UserTier = user ? (is_admin ? "business" : user.tier) : "guest";
+  const tier: UserTier = user ? (is_admin ? "expert" : user.tier) : "guest";
   const identifier = request.clientIdentifier || "guest_ip:127.0.0.1";
   const activeModel = getSetting("active_model", "gpt-6-luna");
 
@@ -1468,6 +1547,12 @@ server.get("/api/auth/me", async (request: FastifyRequest, reply: FastifyReply) 
     usage: {
       current_count: usage.current_count,
       max_limit: usage.max_limit,
+      pro_queries_used: usage.pro_queries_used,
+      pro_queries_max: usage.pro_queries_max,
+      pro_queries_remaining: usage.pro_queries_remaining,
+      normal_queries_used: usage.normal_queries_used,
+      normal_queries_max: usage.normal_queries_max,
+      normal_queries_remaining: usage.normal_queries_remaining,
       remaining: usage.remaining,
       reset_in_hours: usage.reset_in_hours,
       allowed: usage.allowed,
@@ -1483,19 +1568,20 @@ server.get("/api/auth/me", async (request: FastifyRequest, reply: FastifyReply) 
 server.post("/api/auth/tier", async (request: FastifyRequest, reply: FastifyReply) => {
   await requireAdminHook(request, reply);
   const body = (request.body as Record<string, unknown>) || {};
-  const requestedTier = body.tier as UserTier;
+  const requestedTier = body.tier as string;
 
-  if (!requestedTier || !["free", "pro", "business"].includes(requestedTier)) {
-    throw new GatewayHttpError(400, "INVALID_TIER", "Tier must be 'free', 'pro', or 'business'.");
+  if (!requestedTier || !["free", "pro", "expert", "business"].includes(requestedTier)) {
+    throw new GatewayHttpError(400, "INVALID_TIER", "Tier must be 'free', 'pro', or 'expert'.");
   }
 
-  updateUserTier(request.user!.id, requestedTier);
+  const normTier: UserTier = normalizeTier(requestedTier);
+  updateUserTier(request.user!.id, normTier);
   const updatedUser = findUserById(request.user!.id)!;
   const newToken = signUserToken(updatedUser);
 
   return reply.status(200).send({
     status: "TIER_UPDATED",
-    message: `Account upgraded to ${TIER_LIMITS[requestedTier].label}.`,
+    message: `Account upgraded to ${TIER_LIMITS[normTier].label}.`,
     user: {
       id: updatedUser.id,
       email: updatedUser.email,
@@ -1505,7 +1591,7 @@ server.post("/api/auth/tier", async (request: FastifyRequest, reply: FastifyRepl
       provider: updatedUser.auth_provider,
     },
     token: newToken,
-    limits: TIER_LIMITS[requestedTier],
+    limits: TIER_LIMITS[normTier],
   });
 });
 
@@ -1591,7 +1677,7 @@ server.post("/api/admin/model", async (request: FastifyRequest, reply: FastifyRe
  */
 server.get("/api/scenarios/saves", async (request: FastifyRequest, reply: FastifyReply) => {
   await requireAuthHook(request, reply);
-  const scenarios = listUserScenarios(request.user!.id);
+  const scenarios = listUserScenarios(request.user!.id, request.user!.tier);
   return reply.status(200).send({
     count: scenarios.length,
     scenarios,
@@ -1640,8 +1726,21 @@ server.get<{ Params: { id: string } }>(
   async (request, reply) => {
     await requireAuthHook(request, reply);
     await ensureInitialBudgetLoaded();
+    const user = request.user!;
 
-    const scenario = getScenarioById(request.params.id, request.user!.id);
+    if (user.tier === "free") {
+      const allScenarios = listUserScenarios(user.id, "free");
+      const top5Ids = allScenarios.slice(0, 5).map((s) => s.id);
+      if (!top5Ids.includes(request.params.id)) {
+        throw new GatewayHttpError(
+          403,
+          "DRAFT_HISTORY_LIMIT",
+          "Free tier accounts can revisit their last 5 drafts. Upgrade to Pro or Expert to access your complete draft history."
+        );
+      }
+    }
+
+    const scenario = getScenarioById(request.params.id, user.id);
     if (!scenario) {
       throw new GatewayHttpError(404, "SCENARIO_NOT_FOUND", "Saved scenario was not found in your account.");
     }
