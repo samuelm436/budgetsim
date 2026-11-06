@@ -540,75 +540,95 @@ class FiscalSimulator:
                 logger.info("Deduplicating redundant BudgetLineModification for transfer formula: %s", mod.display_name)
                 continue
 
-            # B. Deduplicate against tax_bracket_shifts (avoid doubling income tax revenue impact)
+            # B. Deduplicate against tax_bracket_shifts (only if exact duplicate of decile_tax_delta_bn)
             if has_tax_shifts and mod.category_key in ("income_and_wealth_taxes", "income_taxes", "wealth_taxes"):
-                if (
-                    abs(mod.value - decile_tax_delta_bn) < 1.5
-                    or (mod.value > 0 and decile_tax_delta_bn > 0)
-                    or (mod.value < 0 and decile_tax_delta_bn < 0)
-                ):
+                if abs(mod.value - decile_tax_delta_bn) < 0.75:
                     logger.info("Deduplicating redundant BudgetLineModification for income tax bracket shifts: %s", mod.display_name)
                     continue
 
-            # C. Correct Phantom Revenues: funding cuts (subsidies, admin cuts) misclassified as public revenue
-            if mod.target_side == "revenue":
-                is_funding_cut = any(
-                    k in text_desc
+            # C. Correct Phantom Revenues: pure spending/admin cuts misclassified as positive public revenue
+            disp_lower = (mod.display_name or "").lower()
+            if mod.target_side == "revenue" and mod.value > 0:
+                is_tax_Measure = any(
+                    tk in disp_lower or tk in text_desc
+                    for tk in (
+                        "tax",
+                        "steuer",
+                        "exemption",
+                        "kerosin",
+                        "kerosene",
+                        "dienstwagen",
+                        "company car",
+                        "agrardiesel",
+                        "diesel",
+                        "allowance",
+                        "freibetrag",
+                        "loophole",
+                        "privilege",
+                    )
+                )
+                is_pure_spending_cut = not is_tax_Measure and any(
+                    k in disp_lower
                     for k in (
                         "cut subsidies",
                         "subsidy cut",
                         "subsidies cut",
-                        "curtail subsidies",
-                        "trim subsidies",
                         "admin cut",
                         "overhead trim",
                         "spending cut",
-                        "subventionsabbau",
-                        "kürzung subvention",
-                        "einsparung",
+                        "ausgabenkürzung",
+                        "verwaltungskürzung",
                     )
                 )
-                if is_funding_cut:
+                if is_pure_spending_cut:
                     logger.info("Correcting misclassified phantom revenue to expenditure cut: %s", mod.display_name)
                     mod.target_side = "expenditure"
                     mod.category_key = "general_financial_admin_and_other"
                     mod.value = -abs(mod.value)
 
-            # D. Sign Normalization: Ensure cuts are negative and boosts are positive
-            if mod.operation == "DELTA_BN":
-                if mod.target_side == "expenditure":
-                    is_cut = any(
-                        k in text_desc
-                        for k in ("cut", "reduce", "reduction", "savings", "trim", "curtail", "slash", "abolish", "kürzung", "sparen", "einsparung")
-                    ) and not any(k in text_desc for k in ("prevent cut", "cancel cut", "reverse cut", "offset cut", "oppose cut"))
-                    is_increase = any(
-                        k in text_desc
-                        for k in ("increase", "boost", "expand", "funding", "invest", "raise", "ausbau", "erhöhung", "investition")
-                    ) and not any(k in text_desc for k in ("prevent increase", "cancel increase"))
-
-                    if is_cut and mod.value > 0:
-                        logger.info("Normalizing positive expenditure cut value to negative: %s (%s -> %s)", mod.display_name, mod.value, -mod.value)
-                        mod.value = -abs(mod.value)
-                    elif is_increase and mod.value < 0:
-                        logger.info("Normalizing negative expenditure increase value to positive: %s (%s -> %s)", mod.display_name, mod.value, abs(mod.value))
-                        mod.value = abs(mod.value)
-
-                elif mod.target_side == "revenue":
-                    is_relief = any(
-                        k in text_desc
-                        for k in ("cut", "relief", "reduce", "lower", "exempt", "senkung", "entlastung")
-                    ) and not any(k in text_desc for k in ("prevent relief", "cancel relief"))
-                    is_hike = any(
-                        k in text_desc
-                        for k in ("increase", "hike", "raise", "levy", "carbon tax", "surcharge", "erhöhung", "abgabe")
-                    ) and not any(k in text_desc for k in ("prevent hike", "cancel hike"))
-
-                    if is_relief and mod.value > 0:
-                        logger.info("Normalizing positive tax relief value to negative: %s (%s -> %s)", mod.display_name, mod.value, -mod.value)
-                        mod.value = -abs(mod.value)
-                    elif is_hike and mod.value < 0:
-                        logger.info("Normalizing negative tax hike value to positive: %s (%s -> %s)", mod.display_name, mod.value, abs(mod.value))
-                        mod.value = abs(mod.value)
+            # D. Sign Normalization: Only fix positive values when display_name unambiguously denotes a cut/relief
+            # Never flip an intentional negative value (mod.value < 0) to positive!
+            if mod.operation == "DELTA_BN" and mod.value > 0:
+                has_increase_word = any(
+                    k in disp_lower
+                    for k in (
+                        "increase",
+                        "boost",
+                        "expand",
+                        "funding",
+                        "invest",
+                        "raise",
+                        "hike",
+                        "levy",
+                        "surcharge",
+                        "net",
+                        "new",
+                        "addition",
+                        "reallocation",
+                        "ausbau",
+                        "erhöhung",
+                        "investition",
+                        "abgabe",
+                        "mehr",
+                    )
+                )
+                if not has_increase_word:
+                    if mod.target_side == "expenditure":
+                        is_cut_title = any(
+                            k in disp_lower
+                            for k in ("cut", "reduction", "savings", "trim", "curtail", "slash", "abolish", "kürzung", "einsparung", "abbau")
+                        )
+                        if is_cut_title:
+                            logger.info("Normalizing positive expenditure cut value to negative: %s (%s -> %s)", mod.display_name, mod.value, -mod.value)
+                            mod.value = -abs(mod.value)
+                    elif mod.target_side == "revenue":
+                        is_relief_title = any(
+                            k in disp_lower
+                            for k in ("tax cut", "tax relief", "rate cut", "rate reduction", "steuersenkung", "steuerentlastung")
+                        )
+                        if is_relief_title:
+                            logger.info("Normalizing positive tax relief value to negative: %s (%s -> %s)", mod.display_name, mod.value, -mod.value)
+                            mod.value = -abs(mod.value)
 
             # E. Deduplicate identical duplicate line modifications
             target_map_check = reformed_rev_map if mod.target_side == "revenue" else reformed_exp_map
@@ -621,7 +641,7 @@ class FiscalSimulator:
 
             sanitized_modifications.append(mod)
 
-        # Apply sanitized modifications
+        # Apply sanitized modifications (order-independent accumulation before non-negative clamping)
         for mod in sanitized_modifications:
             target_map = (
                 reformed_rev_map if mod.target_side == "revenue" else reformed_exp_map
@@ -632,13 +652,13 @@ class FiscalSimulator:
 
             prior_val = target_map.get(resolved_key, 0.0)
             if mod.operation == "DELTA_BN":
-                new_val = max(0.0, prior_val + mod.value)
+                new_val = prior_val + mod.value
                 formulas_applied.append(
                     f"\\text{{{custom_labels.get(resolved_key, resolved_key)}}}: {prior_val:.1f}\\text{{B}} + ({mod.value:+.1f}\\text{{B}}) = {new_val:.1f}\\text{{B}}"
                 )
             elif mod.operation == "DELTA_PCT":
                 delta_bn = prior_val * mod.value
-                new_val = max(0.0, prior_val + delta_bn)
+                new_val = prior_val + delta_bn
                 formulas_applied.append(
                     f"\\text{{{custom_labels.get(resolved_key, resolved_key)}}}: {prior_val:.1f}\\text{{B}} \\times (1 + {mod.value:+.1%}) = {new_val:.1f}\\text{{B}}"
                 )
@@ -653,7 +673,7 @@ class FiscalSimulator:
                     f"\\text{{Abolish/Reduce {custom_labels.get(resolved_key, resolved_key)}}}: {prior_val:.1f}\\text{{B}} \\rightarrow {new_val:.1f}\\text{{B}}"
                 )
             elif mod.operation == "NEW_LINE_BN":
-                new_val = max(0.0, prior_val + abs(mod.value))
+                new_val = prior_val + abs(mod.value)
                 custom_labels[resolved_key] = mod.display_name or resolved_key.replace("_", " ").title()
                 formulas_applied.append(
                     f"\\text{{New Program ({custom_labels[resolved_key]})}}: +€{abs(mod.value):.1f}\\text{{B/yr}}"
@@ -662,6 +682,12 @@ class FiscalSimulator:
                 new_val = prior_val
 
             target_map[resolved_key] = round(new_val, 3)
+
+        # Clamp final category totals to non-negative after all modifications have accumulated
+        for k in list(reformed_rev_map.keys()):
+            reformed_rev_map[k] = round(max(0.0, reformed_rev_map[k]), 3)
+        for k in list(reformed_exp_map.keys()):
+            reformed_exp_map[k] = round(max(0.0, reformed_exp_map[k]), 3)
 
         if transfer_program_cost_bn > 0.0 and params.transfer_formula is not None:
             g_ann = params.transfer_formula.base_monthly_grant_eur * 12.0

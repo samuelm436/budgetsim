@@ -801,8 +801,8 @@ server.post("/api/chat/upload-package", async (request: FastifyRequest, reply: F
     );
   }
 
-  // Prepend package source context for clear economist attribution and structural modeling guidance
-  const policyPrompt = `[Uploaded Legislative & Reform Document: ${filename}]\n\nMandate: Analyze this comprehensive reform package and model its full structural impact on the 2027 German Federal Budget. Reconcile any nationwide or general-government aggregates (e.g. Gesamtstaat deficits, pension/social funds) into direct federal budget line-item adjustments using institutional fiscal attribution:\n\n${extractedText}`;
+  // Prepend package source context for clear economist attribution, multi-level/social-security consolidation, and anti-bias audit
+  const policyPrompt = `[Uploaded Legislative & Reform Document: ${filename}]\n\nMandate: Analyze this comprehensive reform package and model its full structural impact across the German public finance architecture (consolidating effects across Bund, Länder/Kommunen via Finanzausgleich/Konnexität, and Social Security RV/ALV/GKV into the canonical budget categories — never set sub-federal or social security fiscal reforms to 0.0). Always think independently: critically audit and recalculate every claimed revenue, transfer cost (especially Negative Income Tax / Sockel break-even phase-out credits), deferral (e.g. 20-year corporate inheritance tax installments), and subsidy cut from first principles rather than blindly accepting the document's self-reported outcomes:\n\n${extractedText}`;
   request.body = {
     raw_prompt: policyPrompt,
     build_on_active_diagram: body.build_on_active_diagram !== false,
