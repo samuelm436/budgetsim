@@ -98,6 +98,9 @@ export interface ScenarioRunRequest {
   override_parameters?: PolicyParameters;
   enable_search_grounding?: boolean;
   reasoning_effort?: "low" | "medium" | "high";
+  model_name?: string;
+  is_package_upload?: boolean;
+  query_cost?: number;
 }
 
 export interface FiscalSummary {
@@ -470,6 +473,9 @@ function validateScenarioRequest(body: unknown): ScenarioRunRequest {
         ? candidate.enable_search_grounding
         : false,
     reasoning_effort: reasoningEffort,
+    model_name: typeof candidate.model_name === "string" ? candidate.model_name : undefined,
+    is_package_upload: Boolean(candidate.is_package_upload),
+    query_cost: typeof candidate.query_cost === "number" ? candidate.query_cost : undefined,
   };
 }
 
@@ -569,7 +575,9 @@ async function handleProposeScenario(
   await ensureInitialBudgetLoaded();
   const validatedPayload = validateScenarioRequest(request.body);
 
+  const isPackageUpload = Boolean(validatedPayload.is_package_upload);
   const isProQuery =
+    isPackageUpload ||
     validatedPayload.reasoning_effort === "medium" ||
     validatedPayload.reasoning_effort === "high" ||
     Boolean(validatedPayload.enable_search_grounding);
@@ -579,13 +587,14 @@ async function handleProposeScenario(
       error: {
         code: "PRO_QUERY_RESTRICTED",
         message:
-          "Pro queries (Medium/High reasoning or Web Search) require a Pro or Expert account. Please switch to Low reasoning without Web Search in Settings or upgrade your account.",
+          "Pro queries (Medium/High reasoning, Web Search, or Document Upload) require a Pro or Expert account. Please switch to Low reasoning without Web Search in Settings or upgrade your account.",
         tier,
       },
     });
   }
 
-  const usageCheck = checkAndIncrementUsage(identifier, tier, isProQuery, 1);
+  const queryCost = isPackageUpload ? 3 : (validatedPayload.query_cost || 1);
+  const usageCheck = checkAndIncrementUsage(identifier, tier, isProQuery, queryCost);
   if (!usageCheck.allowed) {
     return reply.status(429).send({
       error: {
@@ -618,6 +627,12 @@ async function handleProposeScenario(
       ? activeBudgetState.active_summary
       : undefined;
 
+  const modelToUse =
+    validatedPayload.model_name ||
+    (isPackageUpload
+      ? "gpt-6.1-terra"
+      : getSetting("active_model", "gpt-6-luna"));
+
   const controller = new AbortController();
   const timeoutHandle = setTimeout(
     () => controller.abort(),
@@ -641,6 +656,7 @@ async function handleProposeScenario(
         override_parameters: validatedPayload.override_parameters,
         enable_search_grounding: validatedPayload.enable_search_grounding,
         reasoning_effort: validatedPayload.reasoning_effort || "low",
+        model_override: modelToUse,
       }),
       signal: controller.signal,
     });
@@ -697,7 +713,7 @@ async function handleProposeScenario(
   const envelope: GatewayProposalEnvelope & { usage?: any } = {
     proposal_id: proposalId,
     status: "PROPOSED",
-    model_used: simulationResult.metadata?.model_used || getSetting("active_model", "gpt-6-luna"),
+    model_used: simulationResult.metadata?.model_used || modelToUse,
     gateway_received_at: gatewayReceivedAt,
     execution_time_ms: executionTimeMs,
     chat_reply: {
@@ -792,6 +808,9 @@ server.post("/api/chat/upload-package", async (request: FastifyRequest, reply: F
     build_on_active_diagram: body.build_on_active_diagram !== false,
     enable_search_grounding: Boolean(body.enable_search_grounding),
     reasoning_effort: body.reasoning_effort || "low",
+    model_name: "gpt-6.1-terra",
+    is_package_upload: true,
+    query_cost: 3,
   };
 
   return handleProposeScenario(request, reply);

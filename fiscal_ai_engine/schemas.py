@@ -323,6 +323,10 @@ class SimulationRequest(BaseModel):
         default="low",
         description="Reasoning effort level for OpenAI reasoning models like GPT-6-Luna (low, medium, high).",
     )
+    model_override: Optional[str] = Field(
+        default=None,
+        description="Optional model identifier override (e.g. gpt-6.1-terra for document packages).",
+    )
 
 
 class LineItemDelta(BaseModel):

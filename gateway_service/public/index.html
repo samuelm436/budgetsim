@@ -2536,6 +2536,7 @@
     function formatModelShortBadge(modelId) {
       if (!modelId) return "GPT-6-Luna";
       const id = modelId.toLowerCase();
+      if (id.includes("terra")) return "GPT-6.1-Terra";
       if (id.includes("luna") || id.includes("gpt-6")) return "GPT-6-Luna";
       if (id.includes("gemini")) return "Gemini 3.8 Flash";
       return modelId;
@@ -3898,7 +3899,8 @@
     // Admin AI Model Switching Controls
     // ========================================================================
     let availableModelsList = [
-      { id: "gpt-6-luna", name: "GPT-6-Luna (OpenAI)", provider: "openai", description: "High-knowledge European-compliant reasoning model with OpenAI web search", recommended: true },
+      { id: "gpt-6.1-terra", name: "GPT-6.1-Terra (OpenAI)", provider: "openai", description: "Frontier high-capacity document processing model specialized in multi-page packages", recommended: true },
+      { id: "gpt-6-luna", name: "GPT-6-Luna (OpenAI)", provider: "openai", description: "Standard European-compliant reasoning model with OpenAI web search", recommended: false },
       { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash (Google)", provider: "google", description: "Google DeepMind structured outputs with live Google Search grounding", recommended: false },
     ];
     let currentActiveModelId = "gpt-6-luna";
@@ -3919,7 +3921,7 @@
           const data = await res.json();
           currentActiveModelId = data.active_model || "gpt-6-luna";
           if (data.available_models) {
-            availableModelsList = data.available_models.filter(m => m.id === "gpt-6-luna" || m.id === "gemini-3.8-flash");
+            availableModelsList = data.available_models.filter(m => m.id === "gpt-6.1-terra" || m.id === "gpt-6-luna" || m.id === "gemini-3.8-flash");
           }
           const keyStatusEl = document.getElementById("openai-key-status");
           if (keyStatusEl) {

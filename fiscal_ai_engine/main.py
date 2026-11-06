@@ -155,8 +155,8 @@ class UnifiedPolicyExtractor:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         self.openai_base_url = os.getenv("OPENAI_BASE_URL")
 
-    def get_provider(self) -> str:
-        m = self.model_name.lower()
+    def get_provider(self, model_name: Optional[str] = None) -> str:
+        m = (model_name or self.model_name).lower()
         if m.startswith("gemini-"):
             return "google"
         elif m.startswith("glm-"):
@@ -221,14 +221,17 @@ EXECUTION DIRECTIVES:
         enable_search_grounding: bool = False,
         reasoning_effort: str = "low",
         current_baseline: Optional[FiscalSummary] = None,
+        model_override: Optional[str] = None,
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
-        """Extract structured policy parameters via the active LLM provider."""
-        provider = self.get_provider()
+        """Extract structured policy parameters via the active LLM provider or model override."""
+        active_model = model_override or self.model_name
+        provider = self.get_provider(active_model)
         if provider == "google":
             return self._extract_via_gemini(
                 raw_prompt,
                 enable_search_grounding,
                 current_baseline=current_baseline,
+                model_name=active_model,
             )
         else:
             return self._extract_via_openai(
@@ -236,6 +239,7 @@ EXECUTION DIRECTIVES:
                 enable_search_grounding,
                 reasoning_effort,
                 current_baseline=current_baseline,
+                model_name=active_model,
             )
 
     def _extract_via_openai(
@@ -244,15 +248,17 @@ EXECUTION DIRECTIVES:
         enable_search_grounding: bool = False,
         reasoning_effort: str = "low",
         current_baseline: Optional[FiscalSummary] = None,
+        model_name: Optional[str] = None,
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
-        """Extract policy using OpenAI model (e.g. GPT-6-Luna). Supports live OpenAI web search."""
+        """Extract policy using OpenAI model (e.g. GPT-6.1-Terra, GPT-6-Luna). Supports live OpenAI web search."""
         import json
         from openai import OpenAI
 
+        active_model = model_name or self.model_name
         api_key = self.openai_api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError(
-                f"OPENAI_API_KEY is required to run simulations with OpenAI model '{self.model_name}'. "
+                f"OPENAI_API_KEY is required to run simulations with OpenAI model '{active_model}'. "
                 "Please configure OPENAI_API_KEY in your .env or the admin panel."
             )
 
@@ -265,7 +271,7 @@ EXECUTION DIRECTIVES:
             try:
                 schema_json = json.dumps(PolicyExtractionSchema.model_json_schema())
                 resp = client.responses.create(
-                    model=self.model_name,
+                    model=active_model,
                     input=user_prompt,
                     instructions=(
                         SYSTEM_EXTRACTION_INSTRUCTION
@@ -309,18 +315,18 @@ EXECUTION DIRECTIVES:
                         clean_json = clean_json.rsplit("```", 1)[0]
                     clean_json = clean_json.strip()
                 parsed = PolicyExtractionSchema.model_validate_json(clean_json)
-                return parsed, f"OPENAI_WEB_SEARCH_{self.model_name.upper()}", citations
+                return parsed, f"OPENAI_WEB_SEARCH_{active_model.upper()}", citations
             except Exception as search_err:
                 logger.warning(
                     "OpenAI web_search response failed (%s), falling back to standard completion", search_err
                 )
 
         # 2. Standard Structured Completion (no web search or fallback)
-        call_kwargs = _openai_chat_kwargs(self.model_name, desired_temperature=0.1, reasoning_effort=effort)
+        call_kwargs = _openai_chat_kwargs(active_model, desired_temperature=0.1, reasoning_effort=effort)
 
         try:
             completion = client.beta.chat.completions.parse(
-                model=self.model_name,
+                model=active_model,
                 messages=[
                     {"role": "system", "content": SYSTEM_EXTRACTION_INSTRUCTION},
                     {"role": "user", "content": user_prompt},
@@ -331,14 +337,14 @@ EXECUTION DIRECTIVES:
             parsed = completion.choices[0].message.parsed
             if not parsed:
                 raise ValueError("Parsed output was null.")
-            return parsed, f"OPENAI_STRUCTURED_{self.model_name.upper()}", []
+            return parsed, f"OPENAI_STRUCTURED_{active_model.upper()}", []
         except Exception as e:
             err_str = str(e).lower()
             if "temperature" in err_str:
-                logger.warning("Retrying beta parse for %s without temperature due to: %s", self.model_name, e)
+                logger.warning("Retrying beta parse for %s without temperature due to: %s", active_model, e)
                 try:
                     completion = client.beta.chat.completions.parse(
-                        model=self.model_name,
+                        model=active_model,
                         messages=[
                             {"role": "system", "content": SYSTEM_EXTRACTION_INSTRUCTION},
                             {"role": "user", "content": user_prompt},
@@ -347,14 +353,14 @@ EXECUTION DIRECTIVES:
                     )
                     parsed = completion.choices[0].message.parsed
                     if parsed:
-                        return parsed, f"OPENAI_STRUCTURED_{self.model_name.upper()}", []
+                        return parsed, f"OPENAI_STRUCTURED_{active_model.upper()}", []
                 except Exception as retry_err:
                     logger.warning("Retry without temperature also failed: %s", retry_err)
 
-            logger.warning("Beta parse failed for %s (%s), falling back to json_object", self.model_name, e)
+            logger.warning("Beta parse failed for %s (%s), falling back to json_object", active_model, e)
             fallback_kwargs = {} if "temperature" in err_str else call_kwargs
             completion = client.chat.completions.create(
-                model=self.model_name,
+                model=active_model,
                 messages=[
                     {
                         "role": "system",
@@ -368,18 +374,20 @@ EXECUTION DIRECTIVES:
             )
             content = completion.choices[0].message.content or "{}"
             parsed = PolicyExtractionSchema.model_validate_json(content)
-            return parsed, f"OPENAI_JSON_{self.model_name.upper()}", []
+            return parsed, f"OPENAI_JSON_{active_model.upper()}", []
 
     def _extract_via_gemini(
         self,
         raw_prompt: str,
         enable_search_grounding: bool,
         current_baseline: Optional[FiscalSummary] = None,
+        model_name: Optional[str] = None,
     ) -> Tuple[PolicyExtractionSchema, str, List[GroundingCitation]]:
         """Invoke google-genai SDK with structured output schema and low-latency thinking config."""
         from google import genai
         from google.genai import types
 
+        active_model = model_name or self.model_name
         api_key = self.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required for Gemini models.")
@@ -398,7 +406,7 @@ EXECUTION DIRECTIVES:
         )
 
         response = client.models.generate_content(
-            model=self.model_name,
+            model=active_model,
             contents=user_prompt,
             config=config,
         )
@@ -743,11 +751,18 @@ async def get_model_info(
         "provider": extractor.get_provider(),
         "available_models": [
             {
+                "id": "gpt-6.1-terra",
+                "name": "GPT-6.1-Terra (OpenAI)",
+                "provider": "openai",
+                "description": "Frontier high-capacity document processing model specialized in multi-page packages",
+                "recommended": True,
+            },
+            {
                 "id": "gpt-6-luna",
                 "name": "GPT-6-Luna (OpenAI)",
                 "provider": "openai",
-                "description": "High-knowledge European-compliant reasoning model with OpenAI web search",
-                "recommended": True,
+                "description": "Standard European-compliant reasoning model with OpenAI web search",
+                "recommended": False,
             },
             {
                 "id": "gemini-3.8-flash",
@@ -817,13 +832,15 @@ async def simulate_policy(
     simulator: FiscalSimulator = Depends(get_simulator),
     extractor: GeminiPolicyExtractor = Depends(get_policy_extractor),
 ) -> SimulationResult:
-    """Interpret a policy proposal via Gemini 3.8 Flash and compute 2027 budget impacts."""
+    """Interpret a policy proposal and compute 2027 budget impacts."""
     try:
+        model_to_use = request.model_override or extractor.model_name
         extracted_policy, extraction_mode, grounded_citations = extractor.extract_policy(
             raw_prompt=request.raw_prompt,
             enable_search_grounding=request.enable_search_grounding,
             reasoning_effort=request.reasoning_effort or "low",
             current_baseline=request.current_baseline_override,
+            model_override=model_to_use,
         )
 
         if request.override_parameters is not None:
@@ -836,7 +853,7 @@ async def simulate_policy(
             proposal_id=request.proposal_id,
             current_baseline_override=request.current_baseline_override,
             extraction_mode=extraction_mode,
-            model_used=extractor.model_name,
+            model_used=model_to_use,
             extra_citations=grounded_citations,
         )
         return result
