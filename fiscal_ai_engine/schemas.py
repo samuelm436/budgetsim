@@ -187,7 +187,7 @@ class AccountingValidationAudit(BaseModel):
     )
     omitted_items_justification: str = Field(
         default="None - all measures from prompt are fully extracted and modeled.",
-        description="Explanation if any item was non-fiscal, purely regulatory, or intentionally unmodeled.",
+        description="Explanation if any item was non-fiscal, purely regulatory, or intentionally unmodeled. Note: Structural and nationwide reform packages must be converted into federal budget deltas, not omitted as unmodeled.",
     )
 
 
@@ -225,8 +225,8 @@ class PolicyExtractionSchema(BaseModel):
     chat_feedback: str = Field(
         ...,
         description=(
-            "Concise, professional English 1-3 sentence executive response explaining how the proposal "
-            "was mapped into concrete 2027 budget adjustments and its net fiscal impact."
+            "Concise, professional English 1-3 sentence executive response explaining how the proposal or comprehensive structural reform package "
+            "was mapped into concrete 2027 German Federal Budget adjustments and its net fiscal impact on the €118.7B federal deficit."
         ),
     )
     parameters: PolicyParameters = Field(

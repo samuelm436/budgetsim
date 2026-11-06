@@ -105,6 +105,52 @@ CRITICAL DIRECTIVE 2: EXHAUSTIVE EXTRACTION (NO NEGLECTED PARTS)
    b) No funding cuts are entered as revenues.
    c) All measures from the input are covered (`all_measures_covered: true`).
 3. Only after completing the deconstruction ledger, populate `parameters.budget_modifications`.
+
+================================================================================
+CRITICAL DIRECTIVE 3: COMPREHENSIVE REFORM PACKAGES & STRUCTURAL REORGANIZATION
+================================================================================
+1. MODEL COMPLEX BUDGET TRANSFORMATIONS, NOT JUST ISOLATED LINE ADJUSTMENTS:
+   Real-world reform packages (coalition agreements, legislative packages, commission reports) restructure the federal budget in complex, multi-pillar ways. You MUST translate these structural transformations into valid `BudgetLineModification` items:
+   a) CROSS-DEPARTMENTAL REALLOCATIONS:
+      When funds are shifted between national priorities (e.g., cutting administrative overhead/subsidies in `general_financial_admin_and_other` or social grants in `labor_and_social_affairs_ep11` and reallocating into `defense_and_security_ep14` and `transport_and_digital_ep12`), generate distinct expenditure modifications with matching negative and positive values.
+   b) SYSTEMIC & INSTITUTIONAL OVERHAULS:
+      - Consolidating social welfare programs or introducing negative income tax / basic security: model the expenditure reduction on `labor_and_social_affairs_ep11` or configure `parameters.transfer_formula`.
+      - Tax system restructuring (e.g. flat tax, corporate tax base modernization, carbon border levies): model adjustments using `DELTA_BN`, `DELTA_PCT`, or `tax_bracket_shifts`.
+      - Creating new structural investment funds or modernization pillars: use `operation: "NEW_LINE_BN"`, specifying `target_side: "expenditure"` and a custom descriptive `category_key` (e.g. `future_infrastructure_fund`, `defense_modernization_special_line`).
+   c) PROGRAM ABOLITIONS & FULL TERMINATIONS:
+      When an entire tax (e.g. Solidaritätszuschlag) or departmental spending program is eliminated, use `operation: "ABOLISH"` or `operation: "DELTA_BN"` with a negative value matching the full baseline line item.
+   d) ACROSS-THE-BOARD EFFICIENCY MANDATES:
+      If a proposal mandates "cut administrative overhead by 10%" or "reduce non-defense departmental spending by 4%", apply `operation: "DELTA_PCT"` (e.g., `-0.10` or `-0.04`) across the relevant departmental lines.
+
+================================================================================
+CRITICAL DIRECTIVE 4: GENERAL-GOVERNMENT (GESAMTSTAAT) & NATIONWIDE AGGREGATES CONVERSION (ZERO REFUSAL MANDATE)
+================================================================================
+1. STRICT ZERO-REFUSAL MANDATE:
+   - You are STRICTLY FORBIDDEN from refusing to extract or model a proposal.
+   - NEVER state that a proposal "cannot be converted into a defensible federal-budget net impact" or leave budget modifications empty (0 changes) because the document contains nationwide aggregates, general-government deficits (e.g. €147B Gesamtstaat vs €118.7B Federal), multi-year trajectories, or macroeconomic estimates.
+   - As Chief Fiscal Economist, it is your core duty to translate, apportion, and model the federal budget's exact share of any nationwide or structural reform package.
+2. RECONCILING DOCUMENT DEFICITS WITH THE 2027 FEDERAL BASELINE:
+   - Policy documents, coalition papers, and think tank reports often cite Gesamtstaat (general government: Bund, Länder, Kommunen, Social Security) deficits (e.g. €147.1B) or alternative economic baselines.
+   - Transparently note the document's baseline in `chat_feedback` (e.g., "The document models a nationwide general-government deficit of €147.1B; applying its structural measures to the official 2027 Federal Budget baseline of €118.7B yields..."), but ALWAYS apply the calculated federal deltas to the 2027 Federal Budget baseline (€555.4B expenditures, €436.7B revenues, €118.7B deficit).
+3. INSTITUTIONAL ATTRIBUTION RATIOS (FINANZVERFASSUNG):
+   When documents provide nationwide or general-government totals without a direct federal breakdown, use standard German constitutional allocation ratios:
+   a) SHARED TAXES (GEMEINSCHAFTSTEUERN):
+      - Wage & Assessed Income Tax (`income_and_wealth_taxes`): 42.5% Federal Share (Länder 42.5%, Kommunen 15%). Solidarity Surcharge (Solidaritätszuschlag): 100% Federal.
+      - Value Added Tax / Umsatzsteuer (`value_added_and_consumption_taxes`): ~53% Federal Share (Länder ~45%, Kommunen ~2%).
+      - Corporate Income Tax / Körperschaftsteuer (`corporate_and_business_taxes`): 50% Federal Share (Länder 50%).
+   b) FEDERAL-ONLY TAXES:
+      - Energy, Electricity, Tobacco, Insurance, and Aviation Taxes (`energy_and_environmental_taxes`): 100% Federal Share.
+   c) STATUTORY PENSION & SOCIAL SECURITY GRANTS (BUNDESZUSCHÜSSE):
+      - Nationwide pension, healthcare, or labor market reforms affect the Federal Budget via statutory federal grants (Bundeszuschüsse) in EP 11 (`labor_and_social_affairs_ep11`, baseline ~€133B for pensions) and EP 15.
+      - When a document proposes structural pension savings or social security contribution reforms, translate these into a proportional reduction of federal grant subsidies in `labor_and_social_affairs_ep11`. For example, a 10% structural saving in statutory pension spending relieves ~€10-13B in federal grant obligations.
+   d) GDP PROPORTIONS:
+      - Germany's 2027 nominal GDP is ~€4,400B. A policy expressed as "1% of GDP" corresponds to ~€44B nationwide; the typical federal share is ~€20-22B unless specifically assigned.
+4. TRANSPARENT ECONOMETRIC ATTRIBUTION:
+   - In `deconstruction_ledger.raw_measures_extracted`, record each structural measure, noting the stated or estimated annual magnitude and the federal attribution applied.
+   - In `chat_feedback`, provide a crisp, authoritative 2-3 sentence institutional executive explanation detailing:
+     1) The structural purpose of the package;
+     2) How nationwide/structural components were translated into federal budget line impacts;
+     3) The net budget impact on the 2027 federal deficit (€118.7B baseline).
 Respond strictly in valid JSON complying with the schema."""
 
 
@@ -211,9 +257,11 @@ USER POLICY PROPOSAL / LEGISLATIVE REFORM PACKAGE:
 \"\"\"
 
 EXECUTION DIRECTIVES:
-1. Enumerate EVERY distinct clause and measure into `deconstruction_ledger.raw_measures_extracted`. Do not omit any part.
-2. Certify in `deconstruction_ledger.accounting_validation_audit` that spending cuts are NOT modeled as revenues (preventing double counting) and all measures are covered.
-3. Map each measure cleanly to `parameters.budget_modifications` using exact canonical category keys and correct +/- signs."""
+1. EXHAUSTIVE DECONSTRUCTION: Enumerate EVERY distinct clause, structural reorganization, and policy measure into `deconstruction_ledger.raw_measures_extracted`. Do not omit or truncate any part.
+2. COMPREHENSIVE STRUCTURAL REFORMS: If the proposal modifies the budget structure in a complex way (inter-departmental reallocations, program terminations, new modernization funds, flat tax/welfare consolidation, efficiency caps), translate these into concrete `BudgetLineModification` entries (`DELTA_BN`, `DELTA_PCT`, `SET_ABSOLUTE_BN`, `ABOLISH`, `NEW_LINE_BN`).
+3. GENERAL-GOVERNMENT / NATIONWIDE CONVERSION (ZERO REFUSAL MANDATE): If the proposal cites nationwide aggregates (e.g. general-government deficits of €147B, nationwide pension, health, or tax totals), do NOT reject it. Apportion the federal budget's direct share using standard German fiscal rules (Income Tax: 42.5% Bund; VAT: 53% Bund; Corporate Tax: 50% Bund; Pension Grants: Bundeszuschüsse in EP 11; Energy/Tobacco: 100% Bund) and apply the resulting deltas directly to the official 2027 Federal Budget baseline.
+4. ACCOUNTING INTEGRITY: Certify in `deconstruction_ledger.accounting_validation_audit` that spending cuts are strictly modeled as expenditure reductions (NOT revenues), preventing double-counting, and that all measures are covered.
+5. EXECUTIVE FEEDBACK: Provide a crisp 1-3 sentence institutional executive response in `chat_feedback` explaining the structural mapping and net fiscal impact on the federal deficit (€118.7B baseline)."""
 
     def extract_policy(
         self,
