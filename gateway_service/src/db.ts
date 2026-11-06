@@ -217,6 +217,17 @@ export function initDatabase(): void {
       updated_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS guest_usage_transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guest_ip TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      date_utc TEXT NOT NULL,
+      queries_transferred INTEGER NOT NULL,
+      transferred_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_guest_usage_transfers_lookup ON guest_usage_transfers(guest_ip, user_id, date_utc);
   `);
 
   // Ensure daily_usage columns for pro_query_count and normal_query_count exist
@@ -608,6 +619,71 @@ export function getTodayUsage(
     remaining,
     reset_in_hours: resetInHours,
   };
+}
+
+export function cleanClientIp(ip: string | undefined): string {
+  if (!ip) return "127.0.0.1";
+  let cleaned = ip.split(",")[0].trim();
+  if (cleaned.startsWith("::ffff:")) cleaned = cleaned.replace("::ffff:", "");
+  if (cleaned === "::1") cleaned = "127.0.0.1";
+  return cleaned;
+}
+
+/**
+ * Transfers guest query usage incurred today from the guest IP to the authenticated user account,
+ * reducing those queries from the user's daily quota.
+ * Ensures the transfer is idempotent and applied only once per day.
+ */
+export function transferGuestUsageToUser(rawClientIp: string, userId: string): number {
+  if (!rawClientIp || !userId) return 0;
+  const clientIp = cleanClientIp(rawClientIp);
+  const now = new Date();
+  const dateUtc = now.toISOString().slice(0, 10);
+  const guestIdentifier = `guest_ip:${clientIp}`;
+
+  // Check if guest queries have already been transferred for this user or IP today
+  const alreadyTransferred = db
+    .prepare("SELECT queries_transferred FROM guest_usage_transfers WHERE (user_id = ? OR guest_ip = ?) AND date_utc = ?")
+    .get(userId, clientIp, dateUtc) as { queries_transferred: number } | undefined;
+
+  if (alreadyTransferred) {
+    return 0;
+  }
+
+  // Check guest usage recorded for today on this IP
+  const guestUsage = db
+    .prepare("SELECT query_count, normal_query_count FROM daily_usage WHERE identifier = ? AND date_utc = ?")
+    .get(guestIdentifier, dateUtc) as { query_count: number; normal_query_count?: number } | undefined;
+
+  if (!guestUsage || (guestUsage.query_count || 0) <= 0) {
+    return 0;
+  }
+
+  // When a guest uses queries (up to 3 queries), reduce these queries from the account
+  const queriesToTransfer = Math.min(3, guestUsage.query_count || 0);
+  if (queriesToTransfer <= 0) return 0;
+
+  const userIdentifier = `user:${userId}`;
+  const nowIso = now.toISOString();
+
+  // Atomically increment user's daily usage so these queries are reduced from user's account
+  db.prepare(`
+    INSERT INTO daily_usage (identifier, date_utc, query_count, pro_query_count, normal_query_count, last_query_at)
+    VALUES (?, ?, ?, 0, ?, ?)
+    ON CONFLICT(identifier, date_utc) DO UPDATE SET
+      query_count = query_count + excluded.query_count,
+      normal_query_count = normal_query_count + excluded.normal_query_count,
+      last_query_at = excluded.last_query_at
+  `).run(userIdentifier, dateUtc, queriesToTransfer, queriesToTransfer, nowIso);
+
+  // Record that transfer happened
+  db.prepare(`
+    INSERT INTO guest_usage_transfers (guest_ip, user_id, date_utc, queries_transferred, transferred_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(clientIp, userId, dateUtc, queriesToTransfer, nowIso);
+
+  console.log(`[Usage] Transferred ${queriesToTransfer} guest queries from IP ${clientIp} to user ${userId}`);
+  return queriesToTransfer;
 }
 
 // ============================================================================

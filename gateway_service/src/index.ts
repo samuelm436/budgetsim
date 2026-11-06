@@ -20,6 +20,8 @@ import {
   updateUserTier,
   checkAndIncrementUsage,
   getTodayUsage,
+  transferGuestUsageToUser,
+  cleanClientIp,
   listUserScenarios,
   getScenarioById,
   saveNewScenario,
@@ -1367,6 +1369,12 @@ server.get<{ Querystring: { code?: string; error?: string } }>(
       });
 
       const sessionToken = signUserToken(user);
+      const rawIp =
+        (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
+        request.socket.remoteAddress ||
+        "127.0.0.1";
+      transferGuestUsageToUser(rawIp, user.id);
+
       return reply.redirect(`/?token=${sessionToken}`);
     } catch (err: any) {
       console.error("[Keycloak] Callback error:", err);
@@ -1442,6 +1450,12 @@ server.post("/api/auth/register", async (request: FastifyRequest, reply: Fastify
   });
 
   const token = signUserToken(newUser);
+  const rawIp =
+    (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
+    request.socket.remoteAddress ||
+    "127.0.0.1";
+  transferGuestUsageToUser(rawIp, newUser.id);
+
   return reply.status(201).send({
     status: "CREATED",
     token,
@@ -1474,6 +1488,12 @@ server.post("/api/auth/login", async (request: FastifyRequest, reply: FastifyRep
   const kcUser = await authenticateWithKeycloak(email, password);
   if (kcUser) {
     const token = signUserToken(kcUser);
+    const rawIp =
+      (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
+      request.socket.remoteAddress ||
+      "127.0.0.1";
+    transferGuestUsageToUser(rawIp, kcUser.id);
+
     return reply.status(200).send({
       status: "AUTHENTICATED",
       token,
@@ -1500,6 +1520,12 @@ server.post("/api/auth/login", async (request: FastifyRequest, reply: FastifyRep
   }
 
   const token = signUserToken(user);
+  const rawIp =
+    (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
+    request.socket.remoteAddress ||
+    "127.0.0.1";
+  transferGuestUsageToUser(rawIp, user.id);
+
   return reply.status(200).send({
     status: "AUTHENTICATED",
     token,
@@ -1543,6 +1569,12 @@ server.post("/api/auth/social", async (request: FastifyRequest, reply: FastifyRe
   });
 
   const token = signUserToken(user);
+  const rawIp =
+    (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
+    request.socket.remoteAddress ||
+    "127.0.0.1";
+  transferGuestUsageToUser(rawIp, user.id);
+
   return reply.status(200).send({
     status: "AUTHENTICATED",
     token,
@@ -1568,6 +1600,14 @@ server.get("/api/auth/me", async (request: FastifyRequest, reply: FastifyReply) 
   const tier: UserTier = user ? (is_admin ? "expert" : user.tier) : "guest";
   const identifier = request.clientIdentifier || "guest_ip:127.0.0.1";
   const activeModel = getSetting("active_model", "gpt-6-luna");
+
+  if (user) {
+    const rawIp =
+      (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
+      request.socket.remoteAddress ||
+      "127.0.0.1";
+    transferGuestUsageToUser(rawIp, user.id);
+  }
 
   const usage = getTodayUsage(identifier, tier);
 

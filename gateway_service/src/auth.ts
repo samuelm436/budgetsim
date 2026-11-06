@@ -19,6 +19,7 @@ import {
   findUserByProvider,
   createUser,
   updateUserTier,
+  cleanClientIp,
 } from "./db";
 
 const JWT_SECRET = process.env.JWT_SECRET || "govsim-ai-secret-key-2027-change-in-production";
@@ -49,6 +50,7 @@ declare module "fastify" {
   interface FastifyRequest {
     user?: AuthenticatedUser | null;
     clientIdentifier?: string;
+    clientIp?: string;
   }
 }
 
@@ -202,6 +204,13 @@ export async function parseAndVerifyToken(token: string): Promise<AuthenticatedU
  * Middleware: Attaches user if valid token is provided, otherwise leaves as Guest.
  */
 export async function optionalAuthHook(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
+  const rawIp =
+    (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
+    request.socket.remoteAddress ||
+    "127.0.0.1";
+  const clientIp = cleanClientIp(rawIp);
+  request.clientIp = clientIp;
+
   const authHeader = request.headers.authorization;
   let token: string | null = null;
 
@@ -219,12 +228,6 @@ export async function optionalAuthHook(request: FastifyRequest, _reply: FastifyR
       return;
     }
   }
-
-  // Fallback to Guest identifier (IP address or session header)
-  const clientIp =
-    (request.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
-    request.socket.remoteAddress ||
-    "127.0.0.1";
 
   request.user = null;
   request.clientIdentifier = `guest_ip:${clientIp}`;

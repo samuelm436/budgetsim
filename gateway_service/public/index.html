@@ -1738,7 +1738,7 @@
               </div>
               <div style="display:flex; justify-content:space-between; margin-top:4px; font-size:0.68rem; color:var(--text-muted);">
                 <span>Daily Quota</span>
-                <span id="popover-quota-text">1 / 1 simulation left</span>
+                <span id="popover-quota-text">100%</span>
               </div>
             </div>
             <div class="popover-menu">
@@ -3213,10 +3213,10 @@
       }
     });
 
-    function handleAccountAction() {
+    async function handleAccountAction() {
       closeAccountMenu();
       if (currentAuthUser) {
-        logoutUser();
+        await logoutUser();
       } else {
         openAuthModal("login");
       }
@@ -3371,25 +3371,25 @@
 
         if (isAdmin) {
           if (quotaFill) quotaFill.style.width = "100%";
-          if (quotaText) quotaText.innerText = "Unlimited (Administrator Access)";
+          if (quotaText) quotaText.innerText = "100%";
         } else if (tier === "expert") {
           const proRem = usage.pro_queries_remaining !== undefined ? usage.pro_queries_remaining : 100;
           const pct = Math.min(100, Math.max(0, (proRem / 100) * 100));
           if (quotaFill) quotaFill.style.width = `${pct}%`;
-          if (quotaText) quotaText.innerText = `${proRem} / 100 Pro left · Unlimited Normal`;
+          if (quotaText) quotaText.innerText = `${Math.round(pct)}%`;
         } else if (tier === "pro") {
           const proRem = usage.pro_queries_remaining !== undefined ? usage.pro_queries_remaining : 20;
           const normRem = usage.normal_queries_remaining !== undefined ? usage.normal_queries_remaining : 80;
           const totalRem = proRem + normRem;
           const pct = Math.min(100, Math.max(0, (totalRem / 100) * 100));
           if (quotaFill) quotaFill.style.width = `${pct}%`;
-          if (quotaText) quotaText.innerText = `${proRem} / 20 Pro · ${normRem} / 80 Normal left`;
+          if (quotaText) quotaText.innerText = `${Math.round(pct)}%`;
         } else {
           // Free tier
           const normRem = usage.normal_queries_remaining !== undefined ? usage.normal_queries_remaining : (usage.remaining !== undefined ? usage.remaining : 10);
           const pct = Math.min(100, Math.max(0, (normRem / 10) * 100));
           if (quotaFill) quotaFill.style.width = `${pct}%`;
-          if (quotaText) quotaText.innerText = `${normRem} / 10 Normal queries left`;
+          if (quotaText) quotaText.innerText = `${Math.round(pct)}%`;
         }
 
         if (authBtn) {
@@ -3422,7 +3422,7 @@
 
         const pct = Math.min(100, Math.max(0, (normRem / 3) * 100));
         if (quotaFill) quotaFill.style.width = `${pct}%`;
-        if (quotaText) quotaText.innerText = `${normRem} / 3 daily simulations left`;
+        if (quotaText) quotaText.innerText = `${Math.round(pct)}%`;
 
         if (authBtn) {
           authBtn.innerText = "Sign In / Register";
@@ -3480,6 +3480,10 @@
         localStorage.setItem("govsim_auth_token", data.token);
         closeAuthModal();
         await refreshAuthMe();
+        if (pendingOpenSaveScenarioModal) {
+          pendingOpenSaveScenarioModal = false;
+          openSaveScenarioModal();
+        }
       } catch (err) {
         errorEl.innerText = `Network error: ${err.message}`;
       }
@@ -3511,20 +3515,60 @@
           localStorage.setItem("govsim_auth_token", data.token);
           closeAuthModal();
           await refreshAuthMe();
+          if (pendingOpenSaveScenarioModal) {
+            pendingOpenSaveScenarioModal = false;
+            openSaveScenarioModal();
+          }
         }
       } catch (err) {
         alert(`Quick login failed: ${err.message}`);
       }
     }
 
-    function logoutUser() {
+    async function logoutUser() {
+      // 1. If signed-in user has applied proposals, auto-save the active scenario as a draft before logout
+      const token = localStorage.getItem("govsim_auth_token");
+      if (token && currentAppliedProposals && currentAppliedProposals.length > 0) {
+        try {
+          const draftDate = new Date();
+          const timeStr = draftDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const dateStr = draftDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          const firstTitle = currentAppliedProposals[0]?.title || "Custom Reforms";
+          const autoTitle = `Draft: ${firstTitle} (${currentAppliedProposals.length} reform${currentAppliedProposals.length === 1 ? '' : 's'}, ${dateStr} ${timeStr})`;
+
+          await fetch("/api/scenarios/saves", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              title: autoTitle,
+              description: `Draft saved upon sign-out. Contains ${currentAppliedProposals.length} policy changes.`
+            })
+          });
+        } catch (saveErr) {
+          console.warn("Auto-saving draft before logout failed:", saveErr);
+        }
+      }
+
+      // 2. Clear authentication token & session
       localStorage.removeItem("govsim_auth_token");
       currentAuthUser = null;
       activeScenarioId = null;
-      document.getElementById("active-scenario-tag").innerText = "Government Draft (Baseline)";
+
+      // 3. Start a new clean draft (reset to 2027 draft baseline)
+      await resetTo2027Draft();
+      const tag = document.getElementById("active-scenario-tag");
+      if (tag) {
+        tag.innerText = "Government Draft (Baseline)";
+        tag.title = "Active Fiscal Scenario";
+      }
+      clearActiveChat();
+
       enforceTierSettingsConstraints();
       updateSettingsUI();
-      refreshAuthMe();
+      await refreshAuthMe();
     }
 
     // ========================================================================
@@ -3549,8 +3593,11 @@
       }
     }
 
+    let pendingOpenSaveScenarioModal = false;
+
     function openSaveScenarioModal() {
       if (!currentAuthUser) {
+        pendingOpenSaveScenarioModal = true;
         openAuthModal("register");
         return;
       }
@@ -3779,23 +3826,23 @@
         actionBtn.innerText = "Upgrade to Revisit All";
         actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
       } else if (tier === "guest") {
-        titleEl.innerText = "Guest Daily Limit Reached (3 Queries/Day)";
-        descEl.innerText = "You have used your 3 free queries for today as a guest. Create a free account in 5 seconds to unlock 10 queries every day, draft auto-saving, and full fiscal comparisons!";
-        actionBtn.innerText = "Register Free Account (10/Day)";
+        titleEl.innerText = "Guest Daily Limit Reached";
+        descEl.innerText = "You have reached your daily guest simulation limit. Create a free account in 5 seconds to unlock additional daily simulations, draft auto-saving, and full fiscal comparisons!";
+        actionBtn.innerText = "Register Free Account";
         actionBtn.onclick = () => { closeLimitModal(); openAuthModal('register'); };
       } else if (quotaType === "pro") {
-        titleEl.innerText = `Daily Pro Quota Reached (${errorInfo?.daily_pro_queries || 20}/${errorInfo?.daily_pro_queries || 20})`;
+        titleEl.innerText = "Daily Pro Quota Reached";
         descEl.innerText = "You have reached your daily allowance of Pro Queries. You can switch to Low Reasoning and disable Web Search in Settings to use your remaining Normal Queries, or upgrade to Expert for 100 Pro Queries/day and unlimited Normal Queries!";
         actionBtn.innerText = "Upgrade to Expert Tier";
         actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
       } else if (tier === "free") {
-        titleEl.innerText = "Daily Quota Reached (10/10 Queries)";
-        descEl.innerText = `You have reached your free tier limit of 10 daily queries. Quotas reset at 00:00 UTC (in ~${errorInfo?.reset_in_hours || 8} hours). Upgrade to Pro for 20 Pro Queries and 80 Normal Queries every day!`;
+        titleEl.innerText = "Daily Quota Reached";
+        descEl.innerText = `You have reached your free daily simulation quota. Quotas reset at 00:00 UTC (in ~${errorInfo?.reset_in_hours || 8} hours). Upgrade to Pro for deep reasoning and live web search!`;
         actionBtn.innerText = "Upgrade to Pro Tier";
         actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
       } else if (tier === "pro") {
-        titleEl.innerText = "Daily Quota Reached (100/100 Queries)";
-        descEl.innerText = `You have used your daily quota (20 Pro Queries and 80 Normal Queries). Upgrade to Expert for 100 Pro Queries and unlimited Normal Queries!`;
+        titleEl.innerText = "Daily Quota Reached";
+        descEl.innerText = `You have used your daily simulation quota. Upgrade to Expert for 100 Pro Queries and unlimited Normal Queries!`;
         actionBtn.innerText = "Upgrade to Expert Tier";
         actionBtn.onclick = () => { closeLimitModal(); openTierUpgradeModal(); };
       } else {
